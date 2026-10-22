@@ -61,7 +61,7 @@ Planning a week of meals on a budget is tedious: you pick recipes, check what's 
 2. Import the 7 files from `workflows/` (n8n → *Import from file*). Import **7 before 6**, then re-select it in 6's `Load Week` node.
 3. Replace `YOUR_SPOONACULAR_API_KEY` (workflows 1, 5, 6) and `YOUR_N8N_HOST` (workflow 6).
 4. Re-link each Airtable / Groq / Telegram node to your credentials and activate the workflows.
-5. Deploy `frontend/` to Vercel and point it at your n8n webhook URLs.
+5. Frontend: `frontend/` is a single static page (HTML + vanilla JS, Supabase JS from a CDN), no build step. In `index.html`, set the n8n webhook base URL and your Supabase URL + publishable key, then deploy the folder to Vercel (`vercel --prod` from `frontend/`).
 
 ## Screenshots
 

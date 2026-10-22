@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weekly meal planner</title>
+<meta name="theme-color" content="#FAC775">
+<meta name="description" content="Plan a week of meals and get one shopping list.">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Meal plan">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sun:#FAC775; --paper:#FFF8EC; --ink:#3B1F06; --ink-soft:#6B4A26;
+  --coral:#F28C6B; --leaf:#B8DC8C; --lilac:#CBC5F5; --pink:#F7B8C9; --sky:#A9D4F2;
+  --display:'Bricolage Grotesque','Figtree',system-ui,sans-serif;
+  --body:'Figtree',system-ui,-apple-system,sans-serif;
+  --bw:2.5px; --r:18px; --shadow:4px 4px 0 var(--ink);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--sun);color:var(--ink);font:500 16px/1.5 var(--body);min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+a{color:var(--ink)}
+.wrap{max-width:720px;margin:0 auto;padding:36px 20px 150px}
+.screen{display:none}.screen.on{display:block}
+h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;letter-spacing:-.02em}
+h1{font-size:clamp(40px,9vw,68px);line-height:.95}
+h2{font-size:clamp(26px,5vw,34px);line-height:1.05}
+h3{font-size:22px;line-height:1.1}
+.center{text-align:center}
+.lede{font-size:18px;color:var(--ink-soft);margin:16px auto 0;max-width:40ch}
+.hint{color:var(--ink-soft);font-size:14px;margin:10px 0 0}
+
+/* ---------- sections ---------- */
+.block{margin:44px auto 0;max-width:560px;text-align:center}
+.block>h3{margin-bottom:6px}
+.block>.sub{color:var(--ink-soft);font-size:15px;margin:0 0 16px}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.chip{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:999px;padding:9px 16px;font-weight:600;font-size:15px;transition:transform .12s}
+.chip[aria-pressed=true]{background:var(--leaf);box-shadow:3px 3px 0 var(--ink);transform:translate(-1px,-1px)}
+.chips.allergy .chip[aria-pressed=true]{background:var(--pink)}
+.chips.time .chip[aria-pressed=true]{background:var(--sky)}
+.chips.cuisine .chip[aria-pressed=true]{background:var(--lilac)}
+
+/* people + budget */
+.duo{display:grid;grid-template-columns:1fr 1.4fr;gap:14px;text-align:left}
+.panel{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:16px;box-shadow:var(--shadow)}
+.panel .lab{font-weight:700;font-size:15px;display:block;margin-bottom:10px}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stepper button{width:46px;height:46px;border-radius:50%;border:var(--bw) solid var(--ink);background:var(--sun);font-size:24px;font-weight:700;line-height:1;padding:0}
+.stepper output{font-family:var(--display);font-weight:800;font-size:40px;min-width:1.6ch;text-align:center}
+.big{font-family:var(--display);font-weight:800;font-size:40px;line-height:1}
+.big small{font-family:var(--body);font-size:15px;font-weight:600;color:var(--ink-soft)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:14px;background:var(--sun);border:var(--bw) solid var(--ink);border-radius:99px;margin:16px 0 6px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--coral);border:var(--bw) solid var(--ink);box-shadow:2px 2px 0 var(--ink)}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--coral);border:var(--bw) solid var(--ink)}
+.per-meal{font-size:14px;color:var(--ink-soft)}
+
+/* slots */
+.slots{display:grid;grid-template-columns:62px repeat(7,minmax(0,1fr));gap:6px;align-items:center;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:14px;box-shadow:var(--shadow)}
+.slots .d{font-size:13px;font-weight:700}
+.slots .m{font-size:13px;font-weight:700;text-align:left}
+.slot{height:40px;border-radius:10px;background:var(--paper);border:2px solid var(--ink);padding:0}
+.slot[aria-pressed=true]{background:var(--coral)}
+.slot-tools{display:flex;gap:16px;justify-content:center;margin-top:14px}
+.linkbtn{background:none;border:0;padding:0;font-weight:700;text-decoration:underline;text-underline-offset:3px;font-size:15px}
+
+/* tag input */
+.tags{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;text-align:left;box-shadow:var(--shadow)}
+.tag{display:inline-flex;align-items:center;gap:6px;background:var(--sun);border:2px solid var(--ink);border-radius:999px;padding:5px 6px 5px 12px;font-weight:600;font-size:15px}
+.tag button{width:22px;height:22px;border-radius:50%;border:0;background:var(--ink);color:var(--paper);font-size:13px;line-height:1;padding:0}
+.tags input{flex:1;min-width:140px;border:0;background:transparent;padding:8px 6px;outline:none;font-weight:500}
+.tags .add{border:2px solid var(--ink);background:var(--leaf);border-radius:999px;padding:6px 14px;font-weight:700;font-size:14px}
+.tags.small{box-shadow:none;margin-top:14px}
+.reveal{display:none}.reveal.on{display:block}
+textarea{width:100%;min-height:90px;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:14px;resize:vertical;outline:none;box-shadow:var(--shadow)}
+
+.err{color:#9A2A0C;font-weight:700;text-align:center;margin:18px 0 0;min-height:1.2em}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:var(--bw) solid var(--ink);border-radius:14px;padding:14px 22px;font-weight:700;font-size:17px;box-shadow:var(--shadow);transition:transform .08s,box-shadow .08s;background:var(--paper)}
+.btn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+.btn-main{background:var(--ink);color:var(--sun)}
+.btn-coral{background:var(--coral)}
+.btn:disabled{opacity:.7;cursor:progress}
+
+/* dock */
+.dock{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:var(--bw) solid var(--ink);padding:14px 20px calc(14px + env(safe-area-inset-bottom));display:none;z-index:10}
+.dock.on{display:block}
+.dock-inner{max-width:720px;margin:0 auto;display:flex;gap:12px;align-items:center}
+.dock-inner .btn{flex:1;white-space:nowrap;padding-left:14px;padding-right:14px}
+.dock-inner .btn.shrink{flex:0 0 auto}
+.dock-sum{flex:1 1 auto;min-width:0;font-weight:700;font-size:14px;line-height:1.2}
+#dPlan{flex:0 0 auto}
+.dock-sum small{display:block;font-weight:500;color:var(--ink-soft)}
+
+/* loading */
+.loading{min-height:72vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+.plate{width:96px;height:96px;border-radius:50%;background:var(--paper);border:var(--bw) solid var(--ink);box-shadow:var(--shadow);position:relative;margin-bottom:30px;animation:wobble 1.4s ease-in-out infinite}
+.plate::after{content:'';position:absolute;inset:18px;border-radius:50%;border:var(--bw) dashed var(--ink)}
+@keyframes wobble{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+.loading p{color:var(--ink-soft);font-size:17px;margin:12px 0 0}
+
+/* plan */
+.meter{margin:22px auto 0;max-width:520px}
+.meter-bar{height:22px;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:99px;overflow:hidden}
+.meter-bar i{display:block;height:100%;background:var(--leaf);border-right:var(--bw) solid var(--ink);transition:width .4s}
+.meter-bar i.over{background:var(--coral)}
+.meter-text{display:flex;justify-content:space-between;font-size:15px;font-weight:600;margin-top:8px}
+.notice{background:var(--pink);border:var(--bw) solid var(--ink);border-radius:14px;padding:12px 14px;font-weight:600;margin:18px auto 0;max-width:520px;display:none;text-align:center}
+.notice.on{display:block}
+
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:28px auto 0;max-width:440px}
+.week .col{display:flex;flex-direction:column;gap:6px}
+.week .dn{font-size:13px;font-weight:700;text-align:center}
+.cell{aspect-ratio:1;border-radius:10px;background:var(--paper);border:2px solid var(--ink);overflow:hidden;padding:0}
+.cell img{width:100%;height:100%;object-fit:cover;display:block}
+.cell.off{visibility:hidden}
+.cell.rej{background:var(--coral)}
+.cell.rej img{filter:grayscale(1);opacity:.35}
+.cell.empty{border-style:dashed}
+
+.rail-wrap{margin:28px -20px 0}
+.rail{display:flex;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding:0 20px;padding:6px 20px 16px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.card{flex:0 0 min(80vw,330px);scroll-snap-align:start;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:22px;overflow:hidden;position:relative;box-shadow:var(--shadow);transition:transform .25s}
+.photo{position:relative;aspect-ratio:4/3.2;background:var(--coral);border-bottom:var(--bw) solid var(--ink)}
+.photo img{width:100%;height:100%;object-fit:cover;display:block;transition:filter .25s}
+.slot-name{position:absolute;right:12px;bottom:12px;background:var(--paper);border:2px solid var(--ink);border-radius:999px;padding:5px 12px;font-weight:800;font-size:14px}
+.x{position:absolute;top:12px;left:12px;width:40px;height:40px;border-radius:50%;border:var(--bw) solid var(--ink);background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:2;padding:0;box-shadow:2px 2px 0 var(--ink)}
+.x svg{width:18px;height:18px}
+.card-body{padding:16px 16px 20px}
+.card-body h4{margin:0;font-family:var(--display);font-weight:800;font-size:22px;line-height:1.1}
+.facts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.pill{font-size:13px;font-weight:700;border:2px solid var(--ink);border-radius:99px;padding:3px 10px;background:var(--leaf)}
+.pill.b{background:var(--lilac)}
+.why{color:var(--ink-soft);font-size:15px;margin:12px 0 0}
+details{margin-top:14px;border-top:2px dashed var(--ink);padding-top:10px}
+summary{cursor:pointer;font-size:15px;font-weight:700;list-style:none;display:flex;justify-content:space-between}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'+'}
+details[open] summary::after{content:'–'}
+details ul{margin:8px 0 0;padding:0;list-style:none;font-size:14px}
+details li{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+details li span:last-child{color:var(--ink-soft)}
+.recipe-link{display:inline-block;margin-top:14px;font-weight:700;text-underline-offset:3px}
+.stamp{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%) rotate(-12deg);background:var(--coral);border:3px solid var(--ink);border-radius:12px;padding:6px 16px;font-family:var(--display);font-weight:800;font-size:28px;z-index:2;display:none;white-space:nowrap}
+.card.rejected{transform:rotate(-2deg)}
+.card.rejected .photo img{filter:grayscale(1) opacity(.5)}
+.card.rejected .card-body{opacity:.5}
+.card.rejected .stamp{display:block}
+.card.rejected .x{background:var(--coral)}
+.card.empty .photo{display:flex;align-items:center;justify-content:center;background:var(--paper);border-bottom-style:dashed}
+.card.empty .photo p{font-weight:700;margin:0}
+.rail-nav{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+.rail-nav .count{font-weight:700}
+.arrows{display:flex;gap:10px}
+.round{width:46px;height:46px;border-radius:50%;background:var(--paper);border:var(--bw) solid var(--ink);box-shadow:2px 2px 0 var(--ink);display:flex;align-items:center;justify-content:center;padding:0}
+.round svg{width:20px;height:20px}
+
+/* list */
+.aisle{margin-top:30px}
+.aisle h3{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.aisle h3 span{font-family:var(--body);font-size:14px;font-weight:700;border:2px solid var(--ink);border-radius:99px;padding:2px 10px;background:var(--paper)}
+.items{list-style:none;margin:0;padding:0;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.items li{display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:2px dashed rgba(59,31,6,.35)}
+.items li:first-child{border-top:0}
+.items input{appearance:none;-webkit-appearance:none;flex:0 0 26px;height:26px;border-radius:8px;border:var(--bw) solid var(--ink);margin:0;cursor:pointer;display:grid;place-content:center;background:var(--paper)}
+.items input:checked{background:var(--leaf)}
+.items input:checked::after{content:'';width:11px;height:6px;border:3px solid var(--ink);border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.items .n{flex:1;min-width:0}
+.items .n b{font-weight:700;display:block;text-transform:capitalize}
+.items .n small{color:var(--ink-soft);font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.items .q{font-size:14px;font-weight:600;text-align:right;white-space:nowrap}
+.items li.done .n b{text-decoration:line-through;opacity:.5}
+.a-fruits_legumes h3 span{background:var(--leaf)}.a-viande_poisson h3 span{background:var(--pink)}
+.a-cremerie h3 span{background:var(--sky)}.a-epicerie h3 span{background:var(--sun)}.a-surgele h3 span{background:var(--lilac)}
+.have{margin-top:28px;text-align:center}
+.have b{font-weight:800}
+.list-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:32px}
+
+/* top bar + units */
+.topbar{max-width:720px;margin:0 auto;padding:14px 20px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:12}
+.burger{width:46px;height:46px;border-radius:14px;background:var(--paper);border:var(--bw) solid var(--ink);box-shadow:2px 2px 0 var(--ink);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;padding:0}
+.burger i{display:block;width:20px;height:2.5px;background:var(--ink);border-radius:2px}
+.backdrop{position:fixed;inset:0;background:rgba(27,15,3,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.backdrop.on{opacity:1;pointer-events:auto}
+.menu{position:fixed;top:0;left:0;bottom:0;width:min(90vw,380px);background:var(--ink);color:var(--sun);
+  padding:26px 26px calc(26px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px;
+  transform:translateX(-102%);transition:transform .22s ease;z-index:21;overflow-y:auto}
+.menu.on{transform:none}
+.menu .brand{display:flex;align-items:center;gap:12px;margin:0 52px 22px 0}
+.menu .brand img{width:46px;height:46px;border-radius:12px;border:2px solid rgba(250,199,117,.5)}
+.menu .brand b{font-family:var(--display);font-weight:800;font-size:20px;color:var(--paper);line-height:1.1}
+.menu .mlab{font-size:13px;font-weight:700;color:#C9B492;margin:16px 0 8px;text-transform:none}
+.menu .units{display:flex;width:100%;background:transparent;border-color:rgba(250,199,117,.45);box-shadow:none}
+.menu .units button{flex:1;color:var(--sun)}
+.menu .units button[aria-pressed=true]{background:var(--sun);color:var(--ink)}
+.menu .spacer{flex:1}
+.menu .connect{width:100%;background:transparent;border-color:rgba(250,199,117,.55);color:var(--sun);box-shadow:none}
+.menu .why{font-size:13px;color:#C9B492;margin:10px 0 0;text-align:center;line-height:1.35}
+.menu input{width:100%;background:rgba(250,199,117,.1);border:2px solid rgba(250,199,117,.5);border-radius:12px;padding:11px 13px;color:var(--sun);outline:none;margin-bottom:10px;font:inherit}
+.menu input:focus{border-color:var(--sun)}
+.menu input::placeholder{color:#9C8360}
+.menu .oubli{background:none;border:0;padding:0;margin-top:12px;width:100%;color:#C9B492;font-size:13.5px;text-decoration:underline;text-underline-offset:3px}
+.menu .acct{font-weight:700;color:var(--paper);font-size:15px;margin:0 0 12px;word-break:break-all}
+.menu .msg{font-size:13px;color:var(--leaf);margin:10px 0 0;line-height:1.35}
+.menu .msg.bad{color:var(--coral)}
+.weeks{list-style:none;padding:0;margin:26px auto 0;max-width:640px;display:grid;gap:12px}
+.cal{margin-top:26px;overflow-x:auto}
+.cal table{border-collapse:separate;border-spacing:8px;width:100%;min-width:680px}
+.cal th{font-family:var(--display);font-weight:800;font-size:15px;padding-bottom:2px}
+.cal th.corner{width:64px}
+.cal td.hour{font-weight:700;font-size:14px;text-align:right;width:64px;color:var(--ink-soft)}
+.cal td.slot{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:14px;padding:8px;vertical-align:top;height:112px}
+.cal td.slot.vide{background:transparent;border-style:dashed;opacity:.55}
+.cal td.slot img{width:100%;height:46px;object-fit:cover;border-radius:8px;border:2px solid var(--ink);display:block;margin-bottom:6px}
+.cal td.slot b{display:block;font-weight:600;font-size:13.5px;line-height:1.2}
+.cal td.slot small{color:var(--ink-soft);font-size:12px}
+.cal td.slot.reste b::before{content:'♻ '}
+.vues{display:flex;justify-content:center;gap:10px;margin-top:22px}
+.weeks li{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.weeks .plats{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.weeks .plats span{background:var(--sun);border:2px solid var(--ink);border-radius:99px;padding:3px 10px;font-size:13px;font-weight:600}
+.prefs-row{display:flex;justify-content:center;margin-top:18px}
+.menu .mini{display:flex;gap:8px;margin-top:4px}
+.menu .mini button{flex:1;font-size:13.5px;padding:9px 8px}
+.weeks b{font-weight:700}
+.weeks small{display:block;color:var(--ink-soft);font-size:13.5px}
+.menu .close{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:50%;background:transparent;border:2px solid rgba(250,199,117,.5);color:var(--sun);font-size:16px;line-height:1;padding:0}
+.home{margin-right:auto;width:44px;height:44px;border-radius:50%;background:var(--paper);border:var(--bw) solid var(--ink);box-shadow:2px 2px 0 var(--ink);display:none;align-items:center;justify-content:center;padding:0}
+.home.on{display:flex}
+.home svg{width:22px;height:22px}
+.units{display:inline-flex;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:999px;padding:3px;box-shadow:2px 2px 0 var(--ink)}
+.units button{border:0;background:transparent;border-radius:999px;padding:6px 14px;font-weight:700;font-size:14px}
+.units button[aria-pressed=true]{background:var(--ink);color:var(--sun)}
+/* leftovers switch */
+.switch{display:flex;align-items:center;gap:14px;text-align:left;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:14px 16px;margin-top:18px;cursor:pointer;box-shadow:var(--shadow)}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.track{flex:0 0 58px;width:58px;height:32px;box-sizing:border-box;border-radius:99px;background:var(--paper);border:var(--bw) solid var(--ink);position:relative;transition:background .15s}
+.track::after{content:'';position:absolute;top:50%;left:4px;width:19px;height:19px;border-radius:50%;background:var(--ink);transform:translateY(-50%);transition:transform .15s}
+.switch input:checked + .track{background:var(--leaf)}
+.switch input:checked + .track::after{transform:translate(26px,-50%)}
+.switch input:focus-visible + .track{outline:3px solid var(--ink);outline-offset:3px}
+.switch b{display:block;font-size:16px}
+.switch small{display:block;color:var(--ink-soft);font-size:14px;font-weight:500}
+/* nutrition + leftovers + tools */
+.nutri{text-align:center;font-weight:600;margin:14px auto 0;max-width:520px}
+.pill.k{background:var(--sky)}.pill.p{background:var(--pink)}
+.card.leftover .photo img{filter:saturate(.6)}
+.leftover-tag{position:absolute;top:12px;left:12px;background:var(--leaf);border:var(--bw) solid var(--ink);border-radius:999px;padding:5px 12px;font-weight:800;font-size:14px;z-index:2;box-shadow:2px 2px 0 var(--ink)}
+.tools{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:26px}
+/* the plan screen sits above the fixed bottom bar: keep its last row clear of it */
+#ecranPlan .tools{margin-bottom:calc(130px + env(safe-area-inset-bottom))}
+.btn-sm{padding:10px 16px;font-size:15px;border-radius:12px}
+#btnTelegram{text-decoration:none;color:inherit}
+#btnTelegram[hidden]{display:none}
+/* more preferences */
+.more{max-width:560px;margin:44px auto 0;border-top:0;padding-top:0}
+.more>summary{list-style:none;cursor:pointer;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left}
+.more>summary::-webkit-details-marker{display:none}
+.more>summary::after{content:'+';font-family:var(--display);font-weight:800;font-size:28px;line-height:1}
+.more[open]>summary::after{content:'–'}
+.more>summary b{font-family:var(--display);font-size:20px;font-weight:800;display:block}
+.more>summary small{color:var(--ink-soft);font-size:14px}
+.more .block:first-of-type{margin-top:34px}
+.more .block{margin-top:36px}
+.stepper.solo{max-width:240px;margin:0 auto;background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow)}
+.chips.equip .chip[aria-pressed=true]{background:var(--sky)}
+.chips.nutri .chip[aria-pressed=true]{background:var(--pink)}
+.chips.level .chip[aria-pressed=true]{background:var(--lilac)}
+.hidden{display:none!important}
+.pill.t{background:var(--paper)}
+/* ---------- desktop ---------- */
+@media (min-width:900px){
+  .wrap{max-width:900px;padding:18px 36px 80px}
+  .topbar{max-width:none;padding:14px 20px 0;justify-content:flex-start}
+  h1{font-size:clamp(34px,2.9vw,46px)}
+  .dock-inner{max-width:900px}
+  /* everything reads from the left edge, like a settings page */
+  #ecranForm.on>header h1{max-width:none}
+  /* form: full-height rail on the right, like a basket */
+  body[data-ecran=ecranForm]{padding-right:440px}
+  body[data-ecran=ecranForm] #resume{display:block;position:fixed;top:0;right:0;bottom:0;width:440px;overflow-y:auto;
+    background:var(--ink);border-left:var(--bw) solid var(--ink);padding:34px 34px calc(34px + env(safe-area-inset-bottom));z-index:9}
+  .wrap{margin:0 auto}
+  #ecranForm.on>header .lede{font-size:18px;max-width:46ch}
+  .block,.more,.more>summary{max-width:none}
+  /* label left, control right — no more centred blocks with holes */
+  .block{text-align:left;display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr);gap:8px 24px;align-items:start;margin-top:22px;padding-top:20px;border-top:2px dashed rgba(59,31,6,.22)}
+  .block:first-of-type{border-top:0;padding-top:4px}
+  .lab-col{grid-column:1;grid-row:1;align-self:start;padding-top:2px}
+  .lab-col h3{font-size:18px;margin:0}
+  .lab-col .sub{margin:3px 0 0;font-size:13.5px;line-height:1.35}
+  .block>*:not(.lab-col){grid-column:2}
+  .duo{grid-template-columns:auto minmax(0,1fr);gap:16px}
+  .panel{padding:12px 16px}
+  .panel .lab{margin-bottom:6px}
+  .stepper{gap:12px}
+  .stepper button{width:38px;height:38px;font-size:20px}
+  .stepper output{font-size:30px}
+  .big{font-size:30px}
+  input[type=range]{margin:10px 0 4px}
+  .chip{padding:7px 14px;font-size:14.5px}
+  .slots{padding:14px}
+  .slot{height:34px}
+  .switch{padding:12px 14px;margin-top:10px}
+  .more{margin-top:26px}
+  .more>summary{padding:14px 18px}
+  textarea{min-height:70px}
+  .chips{justify-content:center}
+  .block>*:not(.lab-col){justify-self:center;width:100%;max-width:640px}
+  .stepper.solo{margin:0 auto}
+  .slots{padding:18px}
+  .switch{margin-top:12px}
+  .stepper.solo{margin:0}
+  body[data-ecran=ecranForm] .dock{display:none}
+  /* the whole week at a glance instead of a carousel */
+  .rail-wrap{margin:30px 0 0}
+  .rail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;overflow:visible;padding:6px 0 4px}
+  .card{flex:none;width:auto}
+  .rail-nav{display:none}
+  .week{margin-top:30px}
+  /* shopping list on two columns */
+  #aisles{column-count:2;column-gap:34px}
+  .aisle{break-inside:avoid;-webkit-column-break-inside:avoid;margin-top:0;margin-bottom:30px;display:inline-block;width:100%}
+  .tools,.list-actions{margin-top:28px}
+  .cal{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #ecranForm.on>header{margin-bottom:10px}
+  .suggest{grid-column:2;display:flex;align-items:center;gap:10px;background:rgba(255,248,236,.75);border:2px dashed var(--ink);border-radius:12px;padding:8px 12px;font-size:14px;font-weight:600}
+  .suggest button{border:2px solid var(--ink);background:var(--leaf);border-radius:99px;padding:4px 12px;font-weight:700;font-size:13.5px}
+}
+.suggest{display:flex;align-items:center;gap:10px;background:rgba(255,248,236,.75);border:2px dashed var(--ink);border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;margin-top:12px;text-align:left}
+.suggest button{border:2px solid var(--ink);background:var(--leaf);border-radius:99px;padding:5px 12px;font-weight:700;font-size:13.5px;flex:0 0 auto}
+.suggest.hidden{display:none}
+.connect{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:999px;padding:8px 16px;font-weight:700;font-size:14px;box-shadow:2px 2px 0 var(--ink)}
+#resume .connect{width:100%;margin-top:10px;background:transparent;border-color:rgba(250,199,117,.55);color:var(--sun);box-shadow:none}
+#resume{display:none}
+@media (min-width:900px){
+  #resume .box{background:transparent;color:var(--sun);padding:0}
+  #resume h3{font-size:20px;color:var(--sun);margin:0 0 4px}
+  #resume .num{font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;color:var(--paper);margin-bottom:6px}
+  #resume .line{display:flex;justify-content:space-between;gap:16px;font-size:14.5px;color:#E9D9BE;padding:10px 0;border-bottom:1px dashed rgba(250,199,117,.35)}
+  #resume .line:last-of-type{border-bottom:0}
+  #resume .line b{color:var(--paper);font-weight:600;text-align:right}
+  #resume .tags-sum{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  #resume .tg{background:rgba(250,199,117,.16);border:1.5px solid rgba(250,199,117,.5);color:var(--sun);border-radius:99px;padding:3px 9px;font-size:12.5px;font-weight:600}
+  #resume .btn{width:100%;margin-top:18px;background:var(--sun);color:var(--ink);box-shadow:3px 3px 0 #1C0F03}
+  #resume .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px auto 0;max-width:330px;justify-items:center}
+  #resume .shots img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:2px solid rgba(250,199,117,.45);display:block}
+  #resume .cap{font-size:12.5px;color:#C9B492;margin:8px 0 0;text-align:center}
+  #resume .sep{height:1px;background:rgba(250,199,117,.25);margin:26px 0 18px}
+  #resume .why{font-size:13px;color:#C9B492;margin:8px 0 0;text-align:center;line-height:1.35}
+  #resume .note{font-size:12.5px;color:#C9B492;margin:10px 0 0;text-align:center}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:560px){
+  .duo{grid-template-columns:1fr}
+  .slots{grid-template-columns:48px repeat(7,minmax(0,1fr));gap:4px;padding:10px}
+  .slot{height:36px}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button type="button" class="burger" id="btnMenu" aria-expanded="false" aria-controls="menu"><i></i><i></i><i></i></button>
+  <button type="button" class="home" id="btnAccueil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
+  <div class="backdrop" id="backdrop"></div>
+  <nav class="menu" id="menu" aria-label="Menu">
+    <button type="button" class="close" id="btnFermerMenu" aria-label="✕">✕</button>
+    <div class="brand"><img src="/icon-192.png" alt="" onerror="this.remove()"><b data-i18n="brand"></b></div>
+    <p class="mlab" data-i18n="m_lang"></p>
+    <div class="units" role="group">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+    </div>
+    <p class="mlab" data-i18n="m_units"></p>
+    <div class="units" role="group">
+      <button type="button" data-u="metric" aria-pressed="true" data-i18n="metric">Metric</button>
+      <button type="button" data-u="us" aria-pressed="false">US</button>
+    </div>
+    <div class="spacer"></div>
+    <div id="authBox"></div>
+  </nav>
+</div>
+
+<!-- ============ 1. INTAKE ============ -->
+<main class="wrap screen on" id="ecranForm">
+  <header class="center">
+    <h1 data-i18n="hero_t"></h1>
+    <p class="lede" data-i18n="hero_s"></p>
+  </header>
+
+  <section class="block">
+    <h3 data-i18n="who_t"></h3>
+    <p class="sub" data-i18n="who_s"></p>
+    <div class="duo">
+      <div class="panel">
+        <span class="lab" id="lblPeople" data-i18n="people"></span>
+        <div class="stepper" role="group" aria-labelledby="lblPeople">
+          <button type="button" id="moins" aria-label="−">−</button>
+          <output id="people" aria-live="polite">2</output>
+          <button type="button" id="plus" aria-label="+">+</button>
+        </div>
+      </div>
+      <div class="panel">
+        <label class="lab" for="budget" data-i18n="budget_l"></label>
+        <div class="big"><span id="budgetVal">€60</span> <small data-i18n="per_week"></small></div>
+        <input type="range" id="budget" min="20" max="300" step="5" value="60">
+        <span class="per-meal" id="perMeal"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3 data-i18n="meals_t"></h3>
+    <p class="sub" data-i18n="meals_s"></p>
+    <div class="slots" id="slots"></div>
+    <div class="slot-tools">
+      <button type="button" class="linkbtn" data-preset="soir" data-i18n="dinners_only"></button>
+      <button type="button" class="linkbtn" data-preset="all" data-i18n="every_meal"></button>
+      <button type="button" class="linkbtn" data-preset="none" data-i18n="clear"></button>
+    </div>
+    <label class="switch" id="lunchboxRow">
+      <input type="checkbox" id="lunchbox">
+      <span class="track" aria-hidden="true"></span>
+      <span><b data-i18n="box_t"></b><small data-i18n="box_s"></small></span>
+    </label>
+  </section>
+
+  <section class="block">
+    <h3 data-i18n="diet_t"></h3>
+    <p class="sub" data-i18n="diet_s"></p>
+    <div class="chips" id="diet" data-single="true">
+      <button type="button" class="chip" data-v="aucun" aria-pressed="true" data-i18n="d_any"></button>
+      <button type="button" class="chip" data-v="vegetarien" aria-pressed="false" data-i18n="d_veg"></button>
+      <button type="button" class="chip" data-v="vegan" aria-pressed="false" data-i18n="d_vegan"></button>
+      <button type="button" class="chip" data-v="sans_gluten" aria-pressed="false" data-i18n="d_gf"></button>
+      <button type="button" class="chip" data-v="sans_lactose" aria-pressed="false" data-i18n="d_df"></button>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3 data-i18n="all_t"></h3>
+    <p class="sub" data-i18n="all_s"></p>
+    <div class="chips allergy" id="allergies">
+      <button type="button" class="chip" data-v="gluten" aria-pressed="false" data-i18n="a_gluten"></button>
+      <button type="button" class="chip" data-v="dairy" aria-pressed="false" data-i18n="a_dairy"></button>
+      <button type="button" class="chip" data-v="egg" aria-pressed="false" data-i18n="a_egg"></button>
+      <button type="button" class="chip" data-v="peanut" aria-pressed="false" data-i18n="a_peanut"></button>
+      <button type="button" class="chip" data-v="tree nut" aria-pressed="false" data-i18n="a_nut"></button>
+      <button type="button" class="chip" data-v="shellfish" aria-pressed="false" data-i18n="a_shell"></button>
+      <button type="button" class="chip" data-v="seafood" aria-pressed="false" data-i18n="a_fish"></button>
+      <button type="button" class="chip" data-v="soy" aria-pressed="false" data-i18n="a_soy"></button>
+      <button type="button" class="chip" data-v="sesame" aria-pressed="false" data-i18n="a_sesame"></button>
+      <button type="button" class="chip" data-v="__autre" aria-pressed="false" aria-controls="allergiesAutresBox" data-i18n="a_other"></button>
+    </div>
+    <div class="suggest hidden" id="suggestDiet"><span id="suggestTxt"></span><button type="button" id="suggestBtn"></button></div>
+    <div class="reveal" id="allergiesAutresBox">
+      <div class="tags small" data-tags="allergiesAutres" data-ph="ph_allergy"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3 data-i18n="kit_t"></h3>
+    <p class="sub" data-i18n="kit_s"></p>
+    <div class="tags" data-tags="stock" data-ph="ph_stock"></div>
+    <label class="switch">
+      <input type="checkbox" id="frigo">
+      <span class="track" aria-hidden="true"></span>
+      <span><b data-i18n="fridge_t"></b><small data-i18n="fridge_s"></small></span>
+    </label>
+  </section>
+
+  <details class="more" id="more">
+    <summary><span><b data-i18n="more_t"></b><small data-i18n="more_s"></small></span></summary>
+
+    <section class="block">
+      <h3 data-i18n="left_h"></h3>
+      <label class="switch">
+        <input type="checkbox" id="leftovers">
+        <span class="track" aria-hidden="true"></span>
+        <span><b data-i18n="left_t"></b><small data-i18n="left_s"></small></span>
+      </label>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="nut_t"></h3>
+      <p class="sub" data-i18n="nut_s"></p>
+      <div class="chips nutri" id="nutrition" data-single="true">
+        <button type="button" class="chip" data-v="balanced" aria-pressed="true" data-i18n="n_bal"></button>
+        <button type="button" class="chip" data-v="protein" aria-pressed="false" data-i18n="n_prot"></button>
+        <button type="button" class="chip" data-v="light" aria-pressed="false" data-i18n="n_light"></button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="lvl_t"></h3>
+      <p class="sub" data-i18n="lvl_s"></p>
+      <div class="chips level" id="niveau" data-single="true">
+        <button type="button" class="chip" data-v="beginner" aria-pressed="false" data-i18n="l_beg"></button>
+        <button type="button" class="chip" data-v="comfortable" aria-pressed="true" data-i18n="l_comf"></button>
+        <button type="button" class="chip" data-v="confident" aria-pressed="false" data-i18n="l_conf"></button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="eq_t"></h3>
+      <p class="sub" data-i18n="eq_s"></p>
+      <div class="chips equip" id="equipement">
+        <button type="button" class="chip" data-v="oven" aria-pressed="true" data-i18n="e_oven"></button>
+        <button type="button" class="chip" data-v="hob" aria-pressed="true" data-i18n="e_hob"></button>
+        <button type="button" class="chip" data-v="microwave" aria-pressed="true" data-i18n="e_micro"></button>
+        <button type="button" class="chip" data-v="air_fryer" aria-pressed="false" data-i18n="e_air"></button>
+        <button type="button" class="chip" data-v="blender" aria-pressed="false" data-i18n="e_blend"></button>
+        <button type="button" class="chip" data-v="food_processor" aria-pressed="false" data-i18n="e_proc"></button>
+        <button type="button" class="chip" data-v="slow_cooker" aria-pressed="false" data-i18n="e_slow"></button>
+        <button type="button" class="chip" data-v="pressure_cooker" aria-pressed="false" data-i18n="e_press"></button>
+        <button type="button" class="chip" data-v="rice_cooker" aria-pressed="false" data-i18n="e_rice"></button>
+        <button type="button" class="chip" data-v="grill" aria-pressed="false" data-i18n="e_grill"></button>
+      </div>
+      <div class="tags small" data-tags="equipExtra" data-ph="ph_equip"></div>
+    </section>
+
+    <section class="block" id="meatBlock">
+      <h3 data-i18n="mf_t"></h3>
+      <p class="sub" data-i18n="mf_s"></p>
+      <div class="stepper solo" role="group" aria-label="Meat-free days">
+        <button type="button" id="mfMoins" aria-label="−">−</button>
+        <output id="meatFree" aria-live="polite">0</output>
+        <button type="button" id="mfPlus" aria-label="+">+</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="time_t"></h3>
+      <p class="sub" data-i18n="time_s"></p>
+      <div class="chips time" id="temps" data-single="true">
+        <button type="button" class="chip" data-v="20" aria-pressed="false">20 min</button>
+        <button type="button" class="chip" data-v="30" aria-pressed="false">30 min</button>
+        <button type="button" class="chip" data-v="45" aria-pressed="false">45 min</button>
+        <button type="button" class="chip" data-v="0" aria-pressed="true" data-i18n="t_none"></button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="cui_t"></h3>
+      <p class="sub" data-i18n="cui_s"></p>
+      <div class="chips cuisine" id="cuisines">
+        <button type="button" class="chip" data-v="italien" aria-pressed="false" data-i18n="c_it"></button>
+        <button type="button" class="chip" data-v="asiatique" aria-pressed="false" data-i18n="c_as"></button>
+        <button type="button" class="chip" data-v="francais" aria-pressed="false" data-i18n="c_fr"></button>
+        <button type="button" class="chip" data-v="mexicain" aria-pressed="false" data-i18n="c_mx"></button>
+        <button type="button" class="chip" data-v="moyen_orient" aria-pressed="false" data-i18n="c_me"></button>
+        <button type="button" class="chip" data-v="indien" aria-pressed="false" data-i18n="c_in"></button>
+      </div>
+      <div class="tags small" data-tags="cuisinesExtra" data-ph="ph_cuisine" data-list="cuisineIdeas"></div>
+      <datalist id="cuisineIdeas">
+        <option value="Thai"><option value="Japanese"><option value="Korean"><option value="Chinese"><option value="Vietnamese">
+        <option value="Greek"><option value="Spanish"><option value="Mediterranean"><option value="Caribbean"><option value="African">
+        <option value="Thaï"><option value="Japonais"><option value="Coréen"><option value="Grec"><option value="Espagnol">
+      </datalist>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="skip_t"></h3>
+      <p class="sub" data-i18n="skip_s"></p>
+      <div class="tags" data-tags="exclude" data-ph="ph_skip"></div>
+    </section>
+
+    <section class="block">
+      <h3 data-i18n="else_t"></h3>
+      <p class="sub" data-i18n="else_s"></p>
+      <textarea id="notes" data-i18n-ph="ph_notes"></textarea>
+    </section>
+  </details>
+
+  <div class="prefs-row"><button type="button" class="btn btn-sm hidden" id="btnUtiliserPrefs" data-i18n="use_prefs"></button></div>
+
+  <p class="err" id="formErr" role="alert"></p>
+
+  <aside id="resume"><div class="box" id="resumeBox"></div></aside>
+</main>
+
+<!-- ============ 2. LOADING ============ -->
+<main class="wrap screen" id="ecranAttente">
+  <div class="loading">
+    <div class="plate" aria-hidden="true"></div>
+    <h2 id="attenteTitre"></h2>
+    <p id="attenteTexte" aria-live="polite"></p>
+  </div>
+</main>
+
+<!-- ============ 3. PLAN ============ -->
+<main class="wrap screen" id="ecranPlan">
+  <header class="center">
+    <h1 style="font-size:clamp(40px,8vw,60px)" data-i18n="plan_t"></h1>
+    <p class="lede" data-i18n="plan_s"></p>
+  </header>
+  <div class="meter">
+    <div class="meter-bar"><i id="meterFill" style="width:0"></i></div>
+    <div class="meter-text"><span id="meterCost"></span><span id="meterBudget"></span></div>
+  </div>
+  <p class="nutri" id="nutri"></p>
+  <div class="notice" id="planNotice" role="status"></div>
+  <div class="vues">
+    <button type="button" class="chip" id="vueCartes" aria-pressed="true" data-i18n="v_cards"></button>
+    <button type="button" class="chip" id="vueCal" aria-pressed="false" data-i18n="v_cal"></button>
+  </div>
+  <div class="week" id="week"></div>
+  <div class="rail-wrap"><div class="rail" id="rail" tabindex="0"></div></div>
+  <div class="cal" id="cal" hidden></div>
+  <div class="rail-nav">
+    <span class="count" id="railCount"></span>
+    <div class="arrows">
+      <button class="round" id="prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="round" id="next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+  <div class="tools">
+    <button class="btn btn-sm" id="btnPartagerPlan" data-i18n="share_plan"></button>
+    <button class="btn btn-sm" id="btnCalendrier" data-i18n="add_cal"></button>
+    <a class="btn btn-sm" id="btnTelegram" data-i18n="tg_btn" target="_blank" rel="noopener" hidden></a>
+  </div>
+</main>
+
+<!-- ============ 4. SHOPPING LIST ============ -->
+<main class="wrap screen" id="ecranCourses">
+  <header class="center">
+    <h1 style="font-size:clamp(40px,8vw,60px)" data-i18n="list_t"></h1>
+    <p class="lede" id="listSum"></p>
+  </header>
+  <div id="aisles"></div>
+  <p class="have" id="have"></p>
+  <div class="list-actions">
+    <button class="btn btn-main" id="btnRetour" data-i18n="back_meals"></button>
+    <button class="btn" id="btnCopier"></button>
+    <button class="btn" id="btnNouveau" data-i18n="new_plan"></button>
+  </div>
+</main>
+
+<!-- ============ 6. MY WEEKS ============ -->
+<main class="wrap screen" id="ecranSemaines">
+  <header class="center">
+    <h1 style="font-size:clamp(34px,6vw,50px)" data-i18n="weeks_t"></h1>
+    <p class="lede" id="weeksSub"></p>
+  </header>
+  <ul class="weeks" id="weeksList"></ul>
+  <div class="list-actions">
+    <button class="btn btn-main" id="btnNouveau2" data-i18n="new_plan"></button>
+  </div>
+</main>
+
+<!-- ============ 5. ERROR ============ -->
+<main class="wrap screen" id="ecranErreur">
+  <div class="loading">
+    <h2 data-i18n="err_t"></h2>
+    <p id="erreurTexte"></p>
+    <div class="list-actions">
+      <button class="btn btn-main" id="btnErreurPlan" style="display:none" data-i18n="back_meals"></button>
+      <button class="btn" id="btnErreurReset" data-i18n="start_over"></button>
+    </div>
+  </div>
+</main>
+
+<div class="dock" id="dock"><div class="dock-inner" id="dockInner"></div></div>
+<script>
+(function () {
+  'use strict';
+  var BASE = 'https://n8n.srv1209580.hstgr.cloud/webhook/';
+  // Telegram bot username, without the @ (from BotFather)
+  var BOT_TELEGRAM = 'meal_prep_intake_bot';
+  var URL_GENERER = BASE + 'meal-prep', URL_STATUT = BASE + 'meal-prep-statut', URL_REMPLACER = BASE + 'meal-prep-remplacer';
+  var URL_VALIDER = BASE + 'meal-prep-valider', URL_COURSES = BASE + 'meal-prep-courses';
+  var JOURS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  var RAYONS = ['fruits_legumes','viande_poisson','cremerie','epicerie','surgele','autre'];
+  var POLL_MS = 3000, POLL_MAX = 60;
+
+  // Supabase: public project URL and publishable key (safe in the page — row level
+  // security in the database is what protects the data).
+  var SB_URL = 'https://bgxyujrydvlznjjvatqp.supabase.co';
+  var SB_KEY = 'sb_publishable_tvlYdrF5WMdqRyZXVXO3tQ_3EHnB52i';
+  var sb = null, session = null;
+  try { if (window.supabase) sb = window.supabase.createClient(SB_URL, SB_KEY); } catch (e) { sb = null; }
+  var TXT = {
+    en: {
+      metric: 'Metric',
+      hero_t: 'Your week of meals, planned in a minute.',
+      hero_s: "Tell us what you like. Swap anything you don't fancy, then grab one shopping list.",
+      who_t: "Who's eating", who_s: "And how much you'd like to spend on groceries.", people: 'People', budget_l: 'Weekly budget', per_week: 'per week',
+      per_meal: function (x) { return 'About ' + x + ' per person per meal'; }, pick_below: 'Pick some meals below',
+      meals_t: 'Which meals', meals_s: 'Tap the slots you want us to plan.', dinners_only: 'Dinners only', every_meal: 'Every meal', clear: 'Clear',
+      left_h: 'Leftovers', left_t: 'Cook once, eat twice', left_s: "Each dinner makes enough for the next day's lunch.",
+      box_t: 'My lunches need to travel', box_s: 'Lunch box friendly: good cold or reheated at work.',
+      diet_t: 'Diet', diet_s: 'Pick one.', d_any: 'Anything goes', d_veg: 'Vegetarian', d_vegan: 'Vegan', d_gf: 'Gluten free', d_df: 'Dairy free',
+      all_t: 'Allergies', all_s: "We'll leave these out of every recipe.",
+      a_gluten: 'Gluten', a_dairy: 'Dairy', a_egg: 'Eggs', a_peanut: 'Peanuts', a_nut: 'Tree nuts', a_shell: 'Shellfish', a_fish: 'Fish', a_soy: 'Soy', a_sesame: 'Sesame', a_other: 'Something else',
+      ph_allergy: 'Type an allergy',
+      kit_t: 'Already in your kitchen', kit_s: "Type one, press Enter. We'll use these first and leave them off your list.", ph_stock: 'rice',
+      fridge_t: 'Build my week around these', fridge_s: 'Great at the end of the month: recipes that use the most of them come first.',
+      more_t: 'More preferences', more_s: 'Leftovers, nutrition, cooking level, equipment… all optional.',
+      nut_t: 'Nutrition focus', nut_s: 'Filters recipes by protein or calories per serving.', n_bal: 'Balanced', n_prot: 'High protein', n_light: 'Lighter meals',
+      lvl_t: 'Cooking level', lvl_s: 'Beginners get simpler recipes with fewer steps.', l_beg: 'Beginner', l_comf: 'Comfortable', l_conf: 'Confident',
+      eq_t: 'Your kitchen equipment', eq_s: "Tick what you have. No oven means no baked recipes.", e_oven: 'Oven', e_hob: 'Hob', e_micro: 'Microwave', e_air: 'Air fryer',
+      e_blend: 'Blender', e_proc: 'Food processor', e_slow: 'Slow cooker', e_press: 'Pressure cooker', e_rice: 'Rice cooker', e_grill: 'Grill or BBQ', ph_equip: 'Something else? Type it',
+      mf_t: 'Meat-free days', mf_s: 'Days with no meat or fish, spread across the week.',
+      time_t: 'Cooking time', time_s: "The longest you're happy to spend on one meal.", t_none: 'No limit',
+      cui_t: 'Cuisines you enjoy', cui_s: 'Leave empty for a mix of everything.', c_it: 'Italian', c_as: 'Asian', c_fr: 'French', c_mx: 'Mexican', c_me: 'Middle Eastern', c_in: 'Indian', ph_cuisine: 'Another cuisine',
+      skip_t: "Foods you'd rather skip", skip_s: 'Not allergic, just not a fan. Type one, press Enter.', ph_skip: 'mushrooms, olives…',
+      else_t: 'Anything else', else_s: 'Optional.', ph_notes: 'A big dish to share on Sunday, no raw fish…',
+      meals_n: function (n) { return n + ' meal' + (n === 1 ? '' : 's'); }, to_cook: function (n) { return n + ' to cook'; },
+      dock_for: function (p, b) { return 'for ' + p + ' ' + (p === 1 ? 'person' : 'people') + ', €' + b; },
+      plan_btn: 'Plan my week', sending: 'Sending…', err_slots: 'Pick at least one meal in the week.', err_server: "Couldn't reach the server. Check your connection and try again.", err_form: 'Check the form and try again.',
+      w_plan_t: 'Planning your week', w_plan: ['Picking recipes that fit your budget', "Leaving out what you can't eat", 'Reusing ingredients to save money', 'Almost ready'],
+      w_swap_t: 'Finding new meals', w_swap: ["Looking for recipes you haven't seen", 'Keeping the rest of your week balanced', 'Almost ready'],
+      w_list_t: 'Building your shopping list', w_list: ['Merging ingredients across meals', 'Checking what you already have', 'Estimating prices'],
+      long_wait: 'This is taking longer than usual. Refresh the page in a minute to check again.', generic_err: 'Something went wrong on our side.',
+      plan_t: 'Your week', plan_s: "Tap the cross on anything you don't fancy, then swap it.",
+      so_far: function (x) { return 'About ' + x + ' so far'; }, budget_x: function (x) { return 'Budget ' + x; },
+      nutri_line: function (k, p) { return 'Around ' + k + ' kcal and ' + p + ' g of protein per meal, per person.'; },
+      notice: function (l) { return "We couldn't find a new meal for " + l + '. Try swapping again.'; },
+      count: function (i, n) { return i + ' of ' + n; }, share_plan: 'Share this plan', add_cal: 'Add to calendar', tg_btn: 'Cook with Telegram',
+      keep_all: 'Keep all', swap_n: function (k) { return 'Swap ' + k + ' meal' + (k > 1 ? 's' : ''); }, gen_list: 'Generate my shopping list', view_list: 'View my shopping list',
+      no_meal: 'No meal yet', empty_slot: 'Empty slot', empty_rej: "We'll find a recipe when you swap.", empty_hint: 'Tap the cross to ask for a recipe here.',
+      swap_me: 'Swap me', leftovers: 'Leftovers', paid: 'Already paid for', reheat: 'Just reheat',
+      from_dinner: function (d) { return 'From ' + d + ' dinner. Swap that dinner to change this lunch too.'; }, changes_with: function (d) { return 'Changes with ' + d + ' dinner.'; },
+      view_recipe: 'View the full recipe', protein: 'g protein',
+      ingr_for: function (n, np, twice) { return n + ' ingredients for ' + np + ' ' + (np === 1 ? 'person' : 'people') + (twice ? ', twice' : ''); },
+      list_t: 'Your shopping list', list_sum: function (n, c) { return n + ' things to buy, about ' + c + ' in total.'; }, have: 'Already in your kitchen:',
+      back_meals: 'Back to my meals', share_list: 'Share list', copy_list: 'Copy list', new_plan: 'Start a new plan', copied: 'Copied', cant_copy: "Couldn't copy",
+      err_t: "That didn't work", start_over: 'Start over', err_swap: "Couldn't swap those meals.", err_list: "Couldn't build the list.", err_try: "Couldn't reach the server. Try again.",
+      aisles: { fruits_legumes: 'Fruit and veg', viande_poisson: 'Meat and fish', cremerie: 'Dairy and eggs', epicerie: 'Cupboard', surgele: 'Frozen', autre: 'Everything else' },
+      days: { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' },
+      days_s: { Lun: 'Mon', Mar: 'Tue', Mer: 'Wed', Jeu: 'Thu', Ven: 'Fri', Sam: 'Sat', Dim: 'Sun' },
+      moments: { midi: 'Lunch', soir: 'Dinner' },
+      slot: function (d, m) { return d + ' ' + m.toLowerCase(); },
+      resume_t: 'Your week', r_meals: 'Meals', r_cook: 'To cook', r_people: 'People', r_budget: 'Budget', r_per: 'Per person, per meal', r_note: 'You can change everything later.',
+      shots: 'A taste of what is coming', why_login: 'Log in to keep your favourite recipes and your preferences on every device.',
+      brand: 'Meal planner', v_cards: 'Cards', v_cal: 'Calendar', w_courses: 'Shopping list', pw_ph: 'Password (6 characters min)',
+      sign_in: 'Log in', sign_up: 'Create an account', have_account: 'Already have an account? Log in', no_account: "No account yet? Create one",
+      err_creds: 'Wrong email or password.', err_exists: 'An account already exists with this email. Log in instead.',
+      err_weak: 'The password must be at least 6 characters.', check_mail: 'Check your inbox to confirm your address, then log in.',
+      link_dead: 'That link has expired or was already used. Ask for a new one.',
+      forgot: 'Forgotten password?', reset_sent: 'Reset link sent. Check your inbox.', new_pw: 'Choose a new password', save_pw: 'Save my password', pw_saved: 'Password updated.', m_account: 'Account', auth_ph: 'you@example.com', auth_send: 'Email me a link',
+      auth_sent: 'Check your inbox: the link logs you in on this device.', auth_err: "Couldn't send the link. Check the address and try again.",
+      auth_bad: 'Enter a valid email address.', connected: 'Logged in as', logout: 'Log out', my_weeks: 'My weeks',
+      weeks_t: 'My weeks', weeks_sub: function (n) { return n + ' plan' + (n === 1 ? '' : 's') + ' saved to your account.'; },
+      weeks_empty: 'No plan saved yet. The ones you create from now on will appear here.', open_plan: 'Open', r_kitchen: 'In your kitchen',
+      m_prefs: 'My preferences', save_prefs: 'Save', use_short: 'Use', use_prefs: 'Use my saved preferences', prefs_saved: 'Preferences saved to your account.', prefs_used: 'Preferences loaded.',
+      m_lang: 'Language', m_units: 'Units', r_diet: 'Diet', r_all: 'Allergies', r_nutri: 'Nutrition', r_level: 'Cooking level', r_cui: 'Cuisines', r_time: 'Cooking time', r_equip: 'Equipment', r_extra: 'Extras',
+      connect: 'Log in', connect_soon: 'Accounts are coming soon. In the meantime your preferences are kept in this browser, so they are already filled in next time.',
+      sug_diet: function (a, d) { return 'You avoid ' + a.toLowerCase() + '. Set the diet to ' + d + '?'; }, sug_do: 'Set it',
+      home: 'Home', leave_plan: 'Start a new plan? Your current week stays available from its link.',
+      cal_l: 'Lunch: ', cal_d: 'Dinner: ', list_title: 'Shopping list', plan_share: 'Here is my meal plan for the week'
+    },
+    fr: {
+      metric: 'Métrique',
+      hero_t: 'Ta semaine de repas, planifiée en une minute.',
+      hero_s: "Dis-nous ce que tu aimes. Change ce qui ne te tente pas, puis récupère une seule liste de courses.",
+      who_t: 'Qui mange', who_s: 'Et combien tu veux dépenser en courses.', people: 'Personnes', budget_l: 'Budget par semaine', per_week: 'par semaine',
+      per_meal: function (x) { return 'Environ ' + x + ' par personne et par repas'; }, pick_below: 'Choisis des repas ci-dessous',
+      meals_t: 'Quels repas', meals_s: 'Touche les créneaux à planifier.', dinners_only: 'Dîners seulement', every_meal: 'Tous les repas', clear: 'Effacer',
+      left_h: 'Restes', left_t: 'Cuisiner une fois, manger deux fois', left_s: 'Chaque dîner prévoit assez pour le déjeuner du lendemain.',
+      box_t: 'Mes déjeuners sont à emporter', box_s: 'Façon lunch box : bon froid ou réchauffé au travail.',
+      diet_t: 'Régime', diet_s: 'Choisis-en un.', d_any: 'Je mange de tout', d_veg: 'Végétarien', d_vegan: 'Vegan', d_gf: 'Sans gluten', d_df: 'Sans lactose',
+      all_t: 'Allergies', all_s: 'On les retire de chaque recette.',
+      a_gluten: 'Gluten', a_dairy: 'Lait', a_egg: 'Œufs', a_peanut: 'Arachides', a_nut: 'Fruits à coque', a_shell: 'Crustacés', a_fish: 'Poisson', a_soy: 'Soja', a_sesame: 'Sésame', a_other: 'Autre chose',
+      ph_allergy: 'Écris une allergie',
+      kit_t: 'Déjà dans ta cuisine', kit_s: "Écris un ingrédient, appuie sur Entrée. On s'en sert en priorité et on les retire de ta liste.", ph_stock: 'riz',
+      fridge_t: 'Construire ma semaine autour', fridge_s: 'Idéal en fin de mois : les recettes qui en utilisent le plus passent en premier.',
+      more_t: 'Plus de préférences', more_s: 'Restes, nutrition, niveau, équipement… tout est facultatif.',
+      nut_t: 'Objectif nutrition', nut_s: 'Filtre les recettes selon les protéines ou les calories par portion.', n_bal: 'Équilibré', n_prot: 'Riche en protéines', n_light: 'Plus léger',
+      lvl_t: 'Niveau en cuisine', lvl_s: 'Les débutants ont des recettes plus simples, avec moins d’étapes.', l_beg: 'Débutant', l_comf: 'À l’aise', l_conf: 'Confirmé',
+      eq_t: 'Ton équipement', eq_s: "Coche ce que tu as. Pas de four, pas de recettes au four.", e_oven: 'Four', e_hob: 'Plaques', e_micro: 'Micro-ondes', e_air: 'Air fryer',
+      e_blend: 'Mixeur', e_proc: 'Robot culinaire', e_slow: 'Mijoteuse', e_press: 'Cocotte-minute', e_rice: 'Cuiseur à riz', e_grill: 'Grill ou barbecue', ph_equip: 'Autre chose ? Écris-le',
+      mf_t: 'Jours sans viande', mf_s: 'Des jours sans viande ni poisson, répartis dans la semaine.',
+      time_t: 'Temps de cuisine', time_s: 'Le maximum que tu veux passer sur un repas.', t_none: 'Sans limite',
+      cui_t: 'Cuisines que tu aimes', cui_s: 'Laisse vide pour un peu de tout.', c_it: 'Italienne', c_as: 'Asiatique', c_fr: 'Française', c_mx: 'Mexicaine', c_me: 'Moyen-Orient', c_in: 'Indienne', ph_cuisine: 'Une autre cuisine',
+      skip_t: 'Ce que tu préfères éviter', skip_s: "Pas une allergie, juste pas fan. Écris-en un, appuie sur Entrée.", ph_skip: 'champignons, olives…',
+      else_t: 'Autre chose', else_s: 'Facultatif.', ph_notes: 'Un grand plat à partager dimanche, pas de poisson cru…',
+      meals_n: function (n) { return n + ' repas'; }, to_cook: function (n) { return n + ' à cuisiner'; },
+      dock_for: function (p, b) { return 'pour ' + p + ' personne' + (p > 1 ? 's' : '') + ', ' + b + ' €'; },
+      plan_btn: 'Planifier ma semaine', sending: 'Envoi…', err_slots: 'Choisis au moins un repas dans la semaine.', err_server: 'Impossible de joindre le serveur. Vérifie ta connexion et réessaie.', err_form: 'Vérifie le formulaire et réessaie.',
+      w_plan_t: 'On prépare ta semaine', w_plan: ['On choisit des recettes dans ton budget', 'On retire ce que tu ne peux pas manger', 'On réutilise les ingrédients pour économiser', 'Presque prêt'],
+      w_swap_t: 'On cherche de nouveaux repas', w_swap: ['On cherche des recettes que tu n’as pas vues', 'On garde le reste de ta semaine équilibré', 'Presque prêt'],
+      w_list_t: 'On prépare ta liste de courses', w_list: ['On regroupe les ingrédients', 'On vérifie ce que tu as déjà', 'On estime les prix'],
+      long_wait: 'C’est plus long que d’habitude. Recharge la page dans une minute.', generic_err: 'Un problème est survenu de notre côté.',
+      plan_t: 'Ta semaine', plan_s: 'Touche la croix sur ce qui ne te tente pas, puis change-le.',
+      so_far: function (x) { return 'Environ ' + x + ' pour l’instant'; }, budget_x: function (x) { return 'Budget ' + x; },
+      nutri_line: function (k, p) { return 'Environ ' + k + ' kcal et ' + p + ' g de protéines par repas et par personne.'; },
+      notice: function (l) { return 'Aucun nouveau repas trouvé pour ' + l + '. Réessaie de le changer.'; },
+      count: function (i, n) { return i + ' sur ' + n; }, share_plan: 'Partager ce planning', add_cal: 'Ajouter au calendrier', tg_btn: 'Cuisiner avec Telegram',
+      keep_all: 'Tout garder', swap_n: function (k) { return 'Changer ' + k + ' repas'; }, gen_list: 'Créer ma liste de courses', view_list: 'Voir ma liste de courses',
+      no_meal: 'Pas encore de repas', empty_slot: 'Créneau vide', empty_rej: 'On trouvera une recette quand tu valideras.', empty_hint: 'Touche la croix pour demander une recette ici.',
+      swap_me: 'À changer', leftovers: 'Restes', paid: 'Déjà payé', reheat: 'Juste à réchauffer',
+      from_dinner: function (d) { return 'Du dîner de ' + d + '. Change ce dîner pour changer aussi ce déjeuner.'; }, changes_with: function (d) { return 'Change avec le dîner de ' + d + '.'; },
+      view_recipe: 'Voir la recette complète', protein: 'g protéines',
+      ingr_for: function (n, np, twice) { return n + ' ingrédients pour ' + np + ' personne' + (np > 1 ? 's' : '') + (twice ? ', deux fois' : ''); },
+      list_t: 'Ta liste de courses', list_sum: function (n, c) { return n + ' articles à acheter, environ ' + c + ' au total.'; }, have: 'Déjà dans ta cuisine :',
+      back_meals: 'Retour à mes repas', share_list: 'Partager la liste', copy_list: 'Copier la liste', new_plan: 'Nouveau planning', copied: 'Copié', cant_copy: 'Copie impossible',
+      err_t: 'Ça n’a pas marché', start_over: 'Recommencer', err_swap: 'Impossible de changer ces repas.', err_list: 'Impossible de créer la liste.', err_try: 'Impossible de joindre le serveur. Réessaie.',
+      aisles: { fruits_legumes: 'Fruits et légumes', viande_poisson: 'Viande et poisson', cremerie: 'Crèmerie et œufs', epicerie: 'Épicerie', surgele: 'Surgelés', autre: 'Divers' },
+      days: { Lun: 'lundi', Mar: 'mardi', Mer: 'mercredi', Jeu: 'jeudi', Ven: 'vendredi', Sam: 'samedi', Dim: 'dimanche' },
+      days_s: { Lun: 'Lun', Mar: 'Mar', Mer: 'Mer', Jeu: 'Jeu', Ven: 'Ven', Sam: 'Sam', Dim: 'Dim' },
+      moments: { midi: 'Midi', soir: 'Soir' },
+      slot: function (d, m) { return d.charAt(0).toUpperCase() + d.slice(1) + ' ' + m.toLowerCase(); },
+      resume_t: 'Ta semaine', r_meals: 'Repas', r_cook: 'À cuisiner', r_people: 'Personnes', r_budget: 'Budget', r_per: 'Par personne et par repas', r_note: 'Tu pourras tout changer ensuite.',
+      shots: 'Un aperçu de ce qui t\'attend', why_login: 'Connecte-toi pour garder tes recettes favorites et tes préférences sur tous tes appareils.',
+      brand: 'Planificateur de repas', v_cards: 'Cartes', v_cal: 'Calendrier', w_courses: 'Liste de courses', pw_ph: 'Mot de passe (6 caractères min.)',
+      sign_in: 'Se connecter', sign_up: 'Créer un compte', have_account: 'Déjà un compte ? Se connecter', no_account: 'Pas encore de compte ? En créer un',
+      err_creds: 'Email ou mot de passe incorrect.', err_exists: 'Un compte existe déjà avec cet email. Connecte-toi.',
+      err_weak: 'Le mot de passe doit faire au moins 6 caractères.', check_mail: 'Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.',
+      link_dead: 'Ce lien a expiré ou a déjà été utilisé. Demandes-en un nouveau.',
+      forgot: 'Mot de passe oublié ?', reset_sent: 'Lien de réinitialisation envoyé. Regarde ta boîte mail.', new_pw: 'Choisis un nouveau mot de passe', save_pw: 'Enregistrer', pw_saved: 'Mot de passe mis à jour.', m_account: 'Compte', auth_ph: 'toi@exemple.com', auth_send: 'Recevoir mon lien',
+      auth_sent: 'Regarde ta boîte mail : le lien te connecte sur cet appareil.', auth_err: "Impossible d'envoyer le lien. Vérifie l'adresse et réessaie.",
+      auth_bad: 'Entre une adresse email valide.', connected: 'Connecté avec', logout: 'Se déconnecter', my_weeks: 'Mes semaines',
+      weeks_t: 'Mes semaines', weeks_sub: function (n) { return n + ' planning' + (n === 1 ? '' : 's') + ' enregistré' + (n === 1 ? '' : 's') + ' dans ton compte.'; },
+      weeks_empty: 'Aucun planning enregistré. Ceux que tu créeras apparaîtront ici.', open_plan: 'Ouvrir', r_kitchen: 'Dans ta cuisine',
+      m_prefs: 'Mes préférences', save_prefs: 'Enregistrer', use_short: 'Utiliser', use_prefs: 'Utiliser mes préférences enregistrées', prefs_saved: 'Préférences enregistrées dans ton compte.', prefs_used: 'Préférences chargées.',
+      m_lang: 'Langue', m_units: 'Unités', r_diet: 'Régime', r_all: 'Allergies', r_nutri: 'Nutrition', r_level: 'Niveau', r_cui: 'Cuisines', r_time: 'Temps', r_equip: 'Équipement', r_extra: 'Options',
+      connect: 'Se connecter', connect_soon: 'Les comptes arrivent bientôt. En attendant, tes préférences sont gardées dans ce navigateur : elles seront déjà remplies la prochaine fois.',
+      sug_diet: function (a, d) { return 'Tu évites ' + a.toLowerCase() + '. Mettre le régime sur ' + d + ' ?'; }, sug_do: 'Activer',
+      home: 'Accueil', leave_plan: 'Commencer un nouveau planning ? Ta semaine actuelle reste accessible via son lien.',
+      cal_l: 'Déjeuner : ', cal_d: 'Dîner : ', list_title: 'Liste de courses', plan_share: 'Voici mon planning repas de la semaine'
+    }
+  };
+  var lang = 'en', unites = 'metric';
+  try {
+    lang = localStorage.getItem('mp-lang') || ((navigator.language || '').toLowerCase().indexOf('fr') === 0 ? 'fr' : 'en');
+    unites = localStorage.getItem('mp-unites') || 'metric';
+  } catch (e) {}
+  function t(k) { var v = TXT[lang][k]; if (typeof v === 'function') return v.apply(null, Array.prototype.slice.call(arguments, 1)); return v === undefined ? k : v; }
+
+  var ref = null, plan = null, liste = null, listeAJour = false;
+  var rejetes = {}, enAttenteDe = [], pollTimer = null, ecran = 'ecranForm', attenteCle = null;
+  var tags = {}, redessinerTags = {};
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function euros(n) {
+    var v = Math.round((Number(n) || 0) * 100) / 100, s = v % 1 ? v.toFixed(2) : String(v);
+    return lang === 'fr' ? s.replace('.', ',') + ' €' : '€' + s;
+  }
+  function slotLabel(c) { var p = String(c).split('_'); return t('slot', t('days')[p[0]] || p[0], t('moments')[p[1]] || p[1]); }
+  function jour(c) { return t('days')[String(c).split('_')[0]]; }
+
+  // ---------- units ----------
+  function frac(x) {
+    var w = Math.floor(x), r = Math.round((x - w) * 4) / 4;
+    if (r === 1) { w += 1; r = 0; }
+    var f = { 0: '', 0.25: '¼', 0.5: '½', 0.75: '¾' }[r];
+    return (w ? w : (f ? '' : '0')) + f;
+  }
+  function nombre(x) { var s = x >= 10 ? String(Math.round(x)) : String(Math.round(x * 10) / 10); return lang === 'fr' ? s.replace('.', ',') : s; }
+  function versUS(q, u) {
+    u = String(u || '').toLowerCase();
+    var g = { g: 1, kg: 1000 }[u], ml = { ml: 1, l: 1000, tsp: 5, tsps: 5, tbsp: 15, tbsps: 15 }[u];
+    if (g) { var oz = q * g / 28.35; return oz >= 16 ? frac(oz / 16) + ' lb' : frac(Math.max(oz, 0.25)) + ' oz'; }
+    if (ml) {
+      var v = q * ml;
+      if (v < 15) return frac(Math.max(v / 4.93, 0.25)) + ' tsp';
+      if (v < 60) return frac(v / 14.79) + ' tbsp';
+      var cups = v / 236.6;
+      return cups >= 4 ? frac(cups / 4) + ' qt' : frac(cups) + ' cup' + (cups > 1.1 ? 's' : '');
+    }
+    return null;
+  }
+  function qte(q, u) {
+    if (!q) return '';
+    if (unites === 'us') { var c = versUS(q, u); if (c) return c; }
+    var lu = String(u || '').toLowerCase();
+    var joli = { tbsps: lang === 'fr' ? 'c. à s.' : 'tbsp', tbsp: lang === 'fr' ? 'c. à s.' : 'tbsp', tsps: lang === 'fr' ? 'c. à c.' : 'tsp', tsp: lang === 'fr' ? 'c. à c.' : 'tsp', servings: '', serving: '' }[lu];
+    joli = joli === undefined ? (u || '') : joli;
+    return nombre(q) + (joli ? ' ' + joli : '');
+  }
+  function qteTexte(s) {
+    var r = String(s);
+    if (unites === 'us') r = r.replace(/(\d+(?:\.\d+)?)\s*(kg|g|ml|L)\b/g, function (m, n, u) { return versUS(Number(n), u) || m; });
+    if (lang === 'fr') r = r.replace(/\bpieces?\b/g, 'pièces').replace(/\bcloves\b/g, 'gousses').replace(/(\d)\.(\d)/g, '$1,$2');
+    return r;
+  }
+
+  // ---------- leftovers rule (same as backend) ----------
+  function dinerVeille(c) { var p = c.split('_'), i = JOURS.indexOf(p[0]); return i > 0 ? JOURS[i - 1] + '_soir' : null; }
+  function dejeunerLendemain(c) { var p = c.split('_'), i = JOURS.indexOf(p[0]); return i >= 0 && i < 6 ? JOURS[i + 1] + '_midi' : null; }
+  function estReste(c, actif, tous) { return !!actif && /_midi$/.test(c) && tous.indexOf(dinerVeille(c)) !== -1; }
+
+  // ---------- screens ----------
+  function afficher(id) {
+    ecran = id;
+    ['ecranForm','ecranAttente','ecranPlan','ecranCourses','ecranErreur','ecranSemaines'].forEach(function (e) { $(e).classList.toggle('on', e === id); });
+    document.body.dataset.ecran = id;
+    $('dock').classList.toggle('on', id === 'ecranForm' || id === 'ecranPlan');
+    $('btnAccueil').classList.toggle('on', id !== 'ecranForm' && id !== 'ecranAttente');
+    rendreDock();
+    window.scrollTo(0, 0);
+  }
+  // Telegram deep link: the bot receives "/start <reference>" and links this chat to the account.
+  // Only offered when logged in, because the bot finds the account through the plan's email.
+  function majTelegram() {
+    var b = $('btnTelegram'); if (!b) return;
+    var ok = !!(session && ref && BOT_TELEGRAM && BOT_TELEGRAM.indexOf('REMPLACE') === -1);
+    b.hidden = !ok;
+    if (ok) b.href = 'https://t.me/' + BOT_TELEGRAM + '?start=' + encodeURIComponent(ref);
+  }
+  function setRef(r) {
+    ref = r;
+    var u = new URL(window.location.href);
+    if (r) u.searchParams.set('ref', r); else u.searchParams.delete('ref');
+    history.replaceState(null, '', u.toString());
+    majTelegram();
+  }
+  function arreterPolling() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+  function poll(url, estFini, surFini, surEchec) {
+    arreterPolling();
+    var n = 0;
+    (function tick() {
+      n++;
+      fetch(url + '?ref=' + encodeURIComponent(ref) + '&t=' + Date.now())
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.statut === 'echec' || d.statut === 'introuvable') { arreterPolling(); surEchec(d.message || t('generic_err')); return; }
+          if (estFini(d)) { arreterPolling(); surFini(d); return; }
+          suivant();
+        })
+        .catch(suivant);
+      function suivant() {
+        if (n >= POLL_MAX) { surEchec(t('long_wait')); return; }
+        pollTimer = setTimeout(tick, POLL_MS);
+      }
+    })();
+  }
+  function attente(cle) {
+    attenteCle = cle;
+    var i = 0;
+    function maj() { $('attenteTitre').textContent = t(cle + '_t'); $('attenteTexte').textContent = t(cle)[i % t(cle).length]; }
+    maj(); afficher('ecranAttente');
+    clearInterval(attente.t);
+    attente.t = setInterval(function () { if (ecran !== 'ecranAttente') { clearInterval(attente.t); return; } i++; maj(); }, 3500);
+  }
+  function erreur(msg) {
+    $('erreurTexte').textContent = msg;
+    $('btnErreurPlan').style.display = plan ? '' : 'none';
+    afficher('ecranErreur');
+  }
+
+  // ---------- form pieces ----------
+  function initChips(id, onChange) {
+    var box = $(id), single = box.dataset.single === 'true';
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('.chip'); if (!b) return;
+      if (single) box.querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', single ? 'true' : String(b.getAttribute('aria-pressed') !== 'true'));
+      if (onChange) onChange(b);
+    });
+  }
+  function valeursChips(id) { return Array.prototype.map.call($(id).querySelectorAll('.chip[aria-pressed=true]'), function (c) { return c.dataset.v; }); }
+
+  function initTags(box) {
+    var name = box.dataset.tags;
+    tags[name] = [];
+    box.innerHTML = '<input type="text" enterkeyhint="done" autocomplete="off"' + (box.dataset.list ? ' list="' + box.dataset.list + '"' : '') + '><button type="button" class="add">+</button>';
+    var input = box.querySelector('input');
+    function dessiner() {
+      input.placeholder = t(box.dataset.ph); input.setAttribute('aria-label', t(box.dataset.ph));
+      box.querySelectorAll('.tag').forEach(function (x) { x.remove(); });
+      tags[name].forEach(function (v, i) {
+        var s = document.createElement('span');
+        s.className = 'tag';
+        s.innerHTML = esc(v) + '<button type="button" aria-label="✕ ' + esc(v) + '" data-i="' + i + '">✕</button>';
+        box.insertBefore(s, input);
+      });
+      if (name === 'exclude') majViande();
+    }
+    redessinerTags[name] = dessiner;
+    function ajouter() {
+      input.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (v) {
+        if (!tags[name].some(function (x) { return x.toLowerCase() === v.toLowerCase(); })) tags[name].push(v);
+      });
+      input.value = ''; dessiner();
+    }
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); ajouter(); }
+      else if (e.key === 'Backspace' && !input.value && tags[name].length) { tags[name].pop(); dessiner(); }
+    });
+    input.addEventListener('change', function () { if (box.dataset.list && input.value) ajouter(); });
+    input.addEventListener('blur', function () { if (input.value.trim()) ajouter(); });
+    box.addEventListener('click', function (e) {
+      var rm = e.target.closest('[data-i]');
+      if (rm) { tags[name].splice(Number(rm.dataset.i), 1); dessiner(); input.focus(); return; }
+      if (e.target.closest('.add')) { ajouter(); input.focus(); return; }
+      if (e.target === box) input.focus();
+    });
+    dessiner();
+  }
+
+  function dessinerSlots() {
+    var choisis = slotsChoisis();
+    var premier = !$('slots').children.length;
+    var h = '<span></span>';
+    JOURS.forEach(function (j) { h += '<span class="d">' + t('days_s')[j] + '</span>'; });
+    ['midi','soir'].forEach(function (m) {
+      h += '<span class="m">' + t('moments')[m] + '</span>';
+      JOURS.forEach(function (j) {
+        var v = j + '_' + m, on = premier ? m === 'soir' : choisis.indexOf(v) !== -1;
+        h += '<button type="button" class="slot" data-v="' + v + '" aria-pressed="' + on + '" aria-label="' + esc(slotLabel(v)) + '"></button>';
+      });
+    });
+    $('slots').innerHTML = h;
+  }
+  function slotsChoisis() { return Array.prototype.map.call($('slots').querySelectorAll('.slot[aria-pressed=true]'), function (s) { return s.dataset.v; }); }
+  function personnes() { return Number($('people').textContent) || 1; }
+
+  // Meat-free days only make sense if the person eats meat.
+  function sansViandeDeToute() {
+    var d = valeursChips('diet')[0];
+    if (d === 'vegetarien' || d === 'vegan') return true;
+    return (tags.exclude || []).some(function (x) { return /^(all )?(meat|meats|viande|viandes)$/i.test(x.trim()); });
+  }
+  function majViande() {
+    var cache = sansViandeDeToute();
+    $('meatBlock').classList.toggle('hidden', cache);
+    if (cache) $('meatFree').textContent = '0';
+  }
+
+  function majResume() {
+    majSuggestion();
+    sauverPrefs();
+    var b = Number($('budget').value), sl = slotsChoisis(), n = sl.length, p = personnes();
+    $('budgetVal').textContent = euros(b);
+    $('perMeal').textContent = n ? t('per_meal', euros(b / (n * p))) : t('pick_below');
+    $('lunchboxRow').classList.toggle('hidden', !sl.some(function (s) { return /_midi$/.test(s); }));
+    rendreResume();
+    rendreDock();
+  }
+
+  // A few real dishes, so the page looks like food and not like a settings screen.
+  var PHOTOS = [
+    'https://img.spoonacular.com/recipes/795751-312x231.jpg', // chicken fajita stuffed peppers
+    'https://img.spoonacular.com/recipes/715446-312x231.jpg', // slow cooker beef stew
+    'https://img.spoonacular.com/recipes/716268-312x231.jpg', // african chicken peanut stew
+    'https://img.spoonacular.com/recipes/664147-312x231.jpg', // veggie stir fry
+    'https://img.spoonacular.com/recipes/663559-312x231.jpg', // tomato and lentil soup
+    'https://img.spoonacular.com/recipes/715594-312x231.jpg'  // garlic and basil fries
+  ];
+
+  // Right-hand rail on desktop: what the week looks like so far.
+  function rendreResume() {
+    var b = Number($('budget').value), sl = slotsChoisis(), n = sl.length, p = personnes();
+    var aCuire = sl.filter(function (c) { return !estReste(c, $('leftovers').checked, sl); }).length;
+    // One readable line per kind of choice, defaults left out.
+    function libelles(g, ignorer) {
+      return Array.prototype.filter.call($(g).querySelectorAll('.chip[aria-pressed=true]'), function (c) {
+        return c.dataset.v !== '__autre' && (ignorer || []).indexOf(c.dataset.v) === -1;
+      }).map(function (c) { return c.textContent; });
+    }
+    var lignes = [];
+    function ajouter(cle, valeurs) { if (valeurs.length) lignes.push([t(cle), valeurs.join(', ')]); }
+    ajouter('r_diet', libelles('diet', ['aucun']));
+    ajouter('r_all', libelles('allergies').concat(tags.allergiesAutres || []));
+    ajouter('r_nutri', libelles('nutrition', ['balanced']));
+    ajouter('r_level', libelles('niveau', ['comfortable']));
+    ajouter('r_time', libelles('temps', ['0']));
+    ajouter('r_cui', libelles('cuisines').concat(tags.cuisinesExtra || []));
+    ajouter('r_equip', libelles('equipement').concat(tags.equipExtra || []));
+    ajouter('r_kitchen', (tags.stock || []).slice());
+    var options = [];
+    [['leftovers','left_t'],['lunchbox','box_t'],['frigo','fridge_t']].forEach(function (x) {
+      if ($(x[0]).checked && !$(x[0]).closest('.switch').classList.contains('hidden')) options.push(t(x[1]));
+    });
+    var mf = Number($('meatFree').textContent) || 0;
+    if (mf && !$('meatBlock').classList.contains('hidden')) options.push(mf + ' × ' + t('mf_t').toLowerCase());
+    ajouter('r_extra', options);
+
+    $('resumeBox').innerHTML =
+      '<h3>' + t('resume_t') + '</h3>' +
+      '<div class="num">' + t('meals_n', n) + '</div>' +
+      (aCuire < n ? '<div class="line"><span>' + t('r_cook') + '</span><b>' + aCuire + '</b></div>' : '') +
+      '<div class="line"><span>' + t('r_people') + '</span><b>' + p + '</b></div>' +
+      '<div class="line"><span>' + t('r_budget') + '</span><b>' + euros(b) + '</b></div>' +
+      '<div class="line"><span>' + t('r_per') + '</span><b>' + (n ? euros(b / (n * p)) : '—') + '</b></div>' +
+      lignes.map(function (l) { return '<div class="line"><span>' + esc(l[0]) + '</span><b>' + esc(l[1]) + '</b></div>'; }).join('') +
+      '<div class="shots" id="shots">' + PHOTOS.slice(0, 3).map(function (u) {
+        return '<img src="' + u + '" alt="" loading="lazy">';
+      }).join('') + '</div><p class="cap" id="shotsCap">' + t('shots') + '</p>' +
+      '<button class="btn submit" type="button">' + t('plan_btn') + '</button>' +
+      '<p class="note">' + t('r_note') + '</p>' +
+      (session ? '' :
+        '<div class="sep"></div>' +
+        '<button class="connect" type="button" id="resumeConnect">' + t('connect') + '</button>' +
+        '<p class="why">' + t('why_login') + '</p>');
+    $('resumeBox').querySelector('.submit').onclick = envoyer;
+    if ($('resumeConnect')) $('resumeConnect').onclick = function () { menu(true); };
+    // If the photos can't load, drop the whole block rather than leave a caption alone.
+    var suivante = 3; // spare photos, in case one of the three fails to load
+    $('shots').querySelectorAll('img').forEach(function (im) {
+      im.onerror = function () {
+        if (suivante < PHOTOS.length) { im.src = PHOTOS[suivante++]; return; }
+        im.remove();
+        if (!$('shots').querySelector('img')) { $('shots').style.display = 'none'; $('shotsCap').style.display = 'none'; }
+      };
+    });
+  }
+
+  // A dairy or gluten allergy usually means the matching diet; offer it in one tap.
+  var SUG = { dairy: ['a_dairy', 'sans_lactose', 'd_df'], gluten: ['a_gluten', 'sans_gluten', 'd_gf'] };
+  function majSuggestion() {
+    var actives = valeursChips('allergies'), diet = valeursChips('diet')[0];
+    var cle = Object.keys(SUG).filter(function (k) { return actives.indexOf(k) !== -1 && diet !== SUG[k][1]; })[0];
+    var box = $('suggestDiet');
+    if (!cle) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    $('suggestTxt').textContent = t('sug_diet', t(SUG[cle][0]), t(SUG[cle][2]));
+    $('suggestBtn').textContent = t('sug_do');
+    $('suggestBtn').onclick = function () {
+      $('diet').querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', String(c.dataset.v === SUG[cle][1])); });
+      majViande(); majResume(); majSuggestion();
+    };
+  }
+
+  // ---------- language ----------
+  function appliquerLangue() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = t(el.dataset.i18nPh); });
+    document.querySelectorAll('[data-lang]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === lang)); });
+    Object.keys(redessinerTags).forEach(function (k) { redessinerTags[k](); });
+    dessinerSlots();
+    $('btnCopier').textContent = navigator.share ? t('share_list') : t('copy_list');
+    $('btnAccueil').setAttribute('aria-label', t('home'));
+    rendreAuth();
+    majSuggestion();
+    majResume();
+    if (ecran === 'ecranPlan' && plan) { var x = $('rail').scrollLeft; rendrePlan(); $('rail').scrollLeft = x; }
+    if (ecran === 'ecranCourses' && liste) montrerListe(liste);
+    if (ecran === 'ecranAttente' && attenteCle) { $('attenteTitre').textContent = t(attenteCle + '_t'); $('attenteTexte').textContent = t(attenteCle)[0]; }
+  }
+  function majUnites() {
+    document.querySelectorAll('[data-u]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.u === unites)); });
+    if (ecran === 'ecranPlan' && plan) { var x = $('rail').scrollLeft; rendrePlan(); $('rail').scrollLeft = x; }
+    if (ecran === 'ecranCourses' && liste) montrerListe(liste);
+  }
+
+  // Preferences are kept in this browser until real accounts exist.
+  var CHAMPS = ['diet','cuisines','temps','nutrition','niveau','equipement','allergies'];
+  var minuteurSync = null;
+  function sauverPrefs() {
+    // Logged in: the same preferences also go to the account, shortly after the last change.
+    if (sb && session) {
+      clearTimeout(minuteurSync);
+      minuteurSync = setTimeout(function () {
+        var p; try { p = JSON.parse(localStorage.getItem('mp-prefs') || 'null'); } catch (e) {}
+        if (p) sb.from('profiles').upsert({ id: session.user.id, prefs: p, updated_at: new Date().toISOString() }).then(function () {}, function () {});
+      }, 1500);
+    }
+    try {
+      localStorage.setItem('mp-prefs', JSON.stringify({
+        people: personnes(), budget: $('budget').value, slots: slotsChoisis(),
+        chips: CHAMPS.reduce(function (o, g) { o[g] = valeursChips(g); return o; }, {}),
+        tags: { stock: tags.stock, exclude: tags.exclude, cuisinesExtra: tags.cuisinesExtra, equipExtra: tags.equipExtra, allergiesAutres: tags.allergiesAutres },
+        switches: { leftovers: $('leftovers').checked, lunchbox: $('lunchbox').checked, frigo: $('frigo').checked },
+        meatFree: $('meatFree').textContent, notes: $('notes').value
+      }));
+    } catch (e) {}
+  }
+  function chargerPrefs(p) {
+    if (!p) { try { p = JSON.parse(localStorage.getItem('mp-prefs') || 'null'); } catch (e) {} }
+    if (!p) return;
+    $('people').textContent = p.people || 2;
+    $('budget').value = p.budget || 60;
+    if (p.slots && p.slots.length) $('slots').querySelectorAll('.slot').forEach(function (s) { s.setAttribute('aria-pressed', String(p.slots.indexOf(s.dataset.v) !== -1)); });
+    CHAMPS.forEach(function (g) {
+      var v = (p.chips || {})[g]; if (!v) return;
+      $(g).querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', String(v.indexOf(c.dataset.v) !== -1)); });
+    });
+    Object.keys(p.tags || {}).forEach(function (k) { if (tags[k] && Array.isArray(p.tags[k])) { tags[k] = p.tags[k].slice(); if (redessinerTags[k]) redessinerTags[k](); } });
+    $('leftovers').checked = !!(p.switches || {}).leftovers;
+    $('lunchbox').checked = !!(p.switches || {}).lunchbox;
+    $('frigo').checked = !!(p.switches || {}).frigo;
+    $('meatFree').textContent = p.meatFree || '0';
+    $('notes').value = p.notes || '';
+    if (tags.allergiesAutres && tags.allergiesAutres.length) $('allergiesAutresBox').classList.add('on');
+  }
+
+  // ---------- saved preferences ----------
+  function prefsEnregistrees() {
+    try { return JSON.parse(localStorage.getItem('mp-prefs-saved') || 'null'); } catch (e) { return null; }
+  }
+  function majBoutonPrefs() {
+    $('btnUtiliserPrefs').classList.toggle('hidden', !prefsEnregistrees());
+  }
+  function enregistrerPrefs() {
+    var p; try { p = JSON.parse(localStorage.getItem('mp-prefs') || 'null'); } catch (e) {}
+    if (!p) return;
+    try { localStorage.setItem('mp-prefs-saved', JSON.stringify(p)); } catch (e) {}
+    if (sb && session) sb.from('profiles').upsert({ id: session.user.id, prefs: p, updated_at: new Date().toISOString() }).then(function () {}, function () {});
+    majBoutonPrefs();
+    rendreAuth(t('prefs_saved'));
+  }
+  function utiliserPrefs() {
+    var p = prefsEnregistrees();
+    if (!p) return;
+    chargerPrefs(p); appliquerLangue(); majResume();
+  }
+
+  // ---------- account ----------
+  var inscription = false, emailSaisi = '', recuperation = false;
+  function rendreAuth(message, erreur) {
+    if (recuperation) {
+      $('authBox').innerHTML = '<p class="mlab">' + t('new_pw') + '</p>' +
+        '<input type="password" id="newPass" autocomplete="new-password" placeholder="' + esc(t('pw_ph')) + '">' +
+        '<button type="button" class="connect" id="btnNewPass">' + t('save_pw') + '</button>' +
+        (message ? '<p class="msg' + (erreur ? ' bad' : '') + '">' + esc(message) + '</p>' : '');
+      $('btnNewPass').onclick = function () {
+        var pass = $('newPass').value || '';
+        if (pass.length < 6) { rendreAuth(t('err_weak'), true); return; }
+        sb.auth.updateUser({ password: pass }).then(function (r) {
+          if (r.error) { rendreAuth(t('err_weak'), true); return; }
+          recuperation = false; rendreAuth(t('pw_saved'));
+        }, function () { rendreAuth(t('err_creds'), true); });
+      };
+      return;
+    }
+    if ($('authEmail')) emailSaisi = $('authEmail').value || emailSaisi;
+    if (!sb) { $('authBox').innerHTML = '<p class="why">' + t('connect_soon') + '</p>'; return; }
+    if (session) {
+      $('authBox').innerHTML = '<p class="mlab">' + t('m_prefs') + '</p>' +
+        '<div class="mini"><button type="button" class="connect" id="btnSavePrefs">' + t('save_prefs') + '</button>' +
+        '<button type="button" class="connect" id="btnUsePrefs">' + t('use_short') + '</button></div>' +
+        (message ? '<p class="msg">' + esc(message) + '</p>' : '') +
+        '<p class="mlab">' + t('connected') + '</p><p class="acct">' + esc(session.user.email) + '</p>' +
+        '<button type="button" class="connect" id="btnSemaines">' + t('my_weeks') + '</button>' +
+        '<button type="button" class="connect" id="btnLogout" style="margin-top:10px">' + t('logout') + '</button>';
+      $('btnSavePrefs').onclick = enregistrerPrefs;
+      $('btnUsePrefs').onclick = function () { menu(false); utiliserPrefs(); };
+      $('btnSemaines').onclick = function () { menu(false); ouvrirSemaines(); };
+      $('btnLogout').onclick = function () { sb.auth.signOut(); };
+      return;
+    }
+    $('authBox').innerHTML = '<p class="mlab">' + t('m_account') + '</p>' +
+      '<input type="email" id="authEmail" autocomplete="email" value="' + esc(emailSaisi) + '" placeholder="' + esc(t('auth_ph')) + '">' +
+      '<input type="password" id="authPass" autocomplete="' + (inscription ? 'new-password' : 'current-password') + '" placeholder="' + esc(t('pw_ph')) + '">' +
+      '<button type="button" class="connect" id="btnAuth">' + t(inscription ? 'sign_up' : 'sign_in') + '</button>' +
+      '<button type="button" class="linkbtn" id="btnBascule" style="color:var(--sun);margin-top:12px;width:100%">' + t(inscription ? 'have_account' : 'no_account') + '</button>' +
+      (inscription ? '' : '<button type="button" class="oubli" id="btnOubli">' + t('forgot') + '</button>') +
+      (message ? '<p class="msg' + (erreur ? ' bad' : '') + '">' + esc(message) + '</p>' : '<p class="why">' + t('why_login') + '</p>');
+    $('btnBascule').onclick = function () { inscription = !inscription; rendreAuth(); };
+    if ($('btnOubli')) $('btnOubli').onclick = function () {
+      var email = ($('authEmail').value || '').trim();
+      if (!email || email.indexOf('@') === -1) { rendreAuth(t('auth_bad'), true); return; }
+      try {
+        sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+          .then(function (r) {
+            // supabase-js resolves with { error } instead of rejecting: without this check a failed send still said "sent".
+            if (r && r.error) {
+              console.error('resetPasswordForEmail:', r.error);
+              var m = String(r.error.message || '');
+              rendreAuth(/rate|seconds|too many/i.test(m) ? t('auth_err') + ' (' + m + ')' : t('auth_err') + (m ? ' (' + m + ')' : ''), true);
+              return;
+            }
+            rendreAuth(t('reset_sent'));
+          }, function () { rendreAuth(t('auth_err'), true); });
+      } catch (e) { rendreAuth(t('auth_err'), true); }
+    };
+    $('authPass').onkeydown = function (e) { if (e.key === 'Enter') $('btnAuth').click(); };
+    $('btnAuth').onclick = function () {
+      var email = ($('authEmail').value || '').trim(), pass = $('authPass').value || '';
+      if (!email || email.indexOf('@') === -1) { rendreAuth(t('auth_bad'), true); return; }
+      if (pass.length < 6) { rendreAuth(t('err_weak'), true); return; }
+      $('btnAuth').disabled = true; $('btnAuth').textContent = t('sending');
+      var appel = inscription
+        ? sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: window.location.origin } })
+        : sb.auth.signInWithPassword({ email: email, password: pass });
+      appel.then(function (r) {
+        if (!r.error) {
+          // Sign-up with email confirmation on: no session yet, the user must confirm first.
+          if (inscription && !(r.data && r.data.session)) { inscription = false; rendreAuth(t('check_mail')); }
+          return;
+        }
+        var m = String(r.error.message || '').toLowerCase();
+        if (m.indexOf('already') !== -1 || m.indexOf('registered') !== -1) { inscription = false; rendreAuth(t('err_exists'), true); }
+        else if (m.indexOf('password') !== -1 && m.indexOf('short') !== -1) rendreAuth(t('err_weak'), true);
+        else rendreAuth(t('err_creds'), true);
+      }, function () { rendreAuth(t('err_creds'), true); });
+    };
+  }
+
+  function ouvrirSemaines() {
+    afficher('ecranSemaines');
+    $('weeksList').innerHTML = '';
+    $('weeksSub').textContent = '…';
+    sb.from('plans').select('reference,label,created_at,meals').order('created_at', { ascending: false }).limit(30)
+      .then(function (r) {
+        var rows = (r && r.data) || [];
+        $('weeksSub').textContent = rows.length ? t('weeks_sub', rows.length) : t('weeks_empty');
+        $('weeksList').innerHTML = rows.map(function (x) {
+          var d = new Date(x.created_at).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long' });
+          var plats = (x.meals || []).map(function (r) { return '<span>' + esc(r.plat) + '</span>'; }).join('');
+          return '<li><span><b>' + esc(x.label || x.reference) + '</b><small>' + esc(d) + '</small></span>' +
+            '<span style="display:flex;gap:8px"><button class="btn btn-sm" data-ref="' + esc(x.reference) + '">' + t('open_plan') + '</button>' +
+            '<button class="btn btn-sm" data-courses="' + esc(x.reference) + '">' + t('w_courses') + '</button></span>' +
+            (plats ? '<span class="plats">' + plats + '</span>' : '') + '</li>';
+        }).join('');
+      }, function () { $('weeksSub').textContent = t('weeks_empty'); });
+  }
+
+  function enregistrerPlan(reference, nbRepas) {
+    if (!sb || !session) return;
+    var repas = (plan && plan.repas ? plan.repas : []).map(function (r) {
+      return { creneau: r.creneau, plat: r.plat, lien: r.lien || '' };
+    });
+    sb.from('plans').upsert({ user_id: session.user.id, reference: reference, label: nbRepas + ' ' + t('r_meals').toLowerCase(), meals: repas },
+      { onConflict: 'user_id,reference' }).then(function () {}, function () {});
+  }
+
+  // When a session appears, the account's preferences win over this browser's copy.
+  function appliquerSession(s) {
+    var nouveau = !!s && (!session || session.user.id !== s.user.id);
+    session = s || null;
+    majTelegram();
+    rendreAuth();
+    majResume();
+    majBoutonPrefs();
+    if (!session) return;
+    if (window.location.hash.indexOf('access_token') !== -1) history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (!nouveau) return;
+    menu(false);
+    sb.from('profiles').select('prefs').eq('id', session.user.id).maybeSingle().then(function (r) {
+      var p = r && r.data && r.data.prefs;
+      if (p && Object.keys(p).length) { chargerPrefs(p); appliquerLangue(); majResume(); }
+      else sauverPrefs();
+    }, function () {});
+  }
+
+  // ---------- submit ----------
+  function envoyer() {
+    var err = $('formErr'); err.textContent = '';
+    var slots = slotsChoisis();
+    if (!slots.length) { err.textContent = t('err_slots'); $('slots').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    var payload = {
+      email: (session && session.user && session.user.email) || '', lang: lang,
+      budget: Number($('budget').value), people: personnes(),
+      diet: valeursChips('diet')[0] || 'aucun',
+      cuisines: valeursChips('cuisines'), cuisines_extra: tags.cuisinesExtra.slice(),
+      allergies: valeursChips('allergies').filter(function (v) { return v !== '__autre'; }),
+      allergies_extra: $('allergiesAutresBox').classList.contains('on') ? tags.allergiesAutres.slice() : [],
+      exclude: tags.exclude.slice(),
+      max_time: Number(valeursChips('temps')[0]) || 0,
+      nutrition: valeursChips('nutrition')[0] || 'balanced',
+      level: valeursChips('niveau')[0] || 'comfortable',
+      equipment: valeursChips('equipement'),
+      equipment_extra: tags.equipExtra.slice(),
+      meat_free: sansViandeDeToute() ? 0 : Number($('meatFree').textContent) || 0,
+      lunchbox: $('lunchbox').checked && slots.some(function (s) { return /_midi$/.test(s); }),
+      leftovers: $('leftovers').checked,
+      fridge_first: $('frigo').checked && tags.stock.length > 0,
+      notes: $('notes').value.trim(),
+      stock: tags.stock.slice(),
+      meal_slots: slots
+    };
+    document.querySelectorAll('.submit').forEach(function (x) { x.disabled = true; x.textContent = t('sending'); });
+    var relacher = function () { document.querySelectorAll('.submit').forEach(function (x) { x.disabled = false; x.textContent = t('plan_btn'); }); };
+    fetch(URL_GENERER, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        relacher();
+        if (!d.ok) { rendreDock(); rendreResume(); err.textContent = (d.erreurs || [t('err_form')]).join(' '); err.scrollIntoView({ block: 'center' }); return; }
+        setRef(d.reference);
+        plan = null; liste = null; listeAJour = false; rejetes = {};
+        attendrePlan();
+      })
+      .catch(function () { relacher(); rendreDock(); rendreResume(); err.textContent = t('err_server'); err.scrollIntoView({ block: 'center' }); });
+  }
+  function attendrePlan() {
+    attente('w_plan');
+    poll(URL_STATUT, function (d) { return d.statut === 'plan_genere' && d.repas; }, montrerPlan, erreur);
+  }
+
+  // ---------- plan ----------
+  function montrerPlan(d) {
+    plan = d;
+    enregistrerPlan(d.reference || ref, (d.creneaux || d.repas || []).length);
+    listeAJour = d.statut_demande === 'validee';
+    rejetes = {};
+    var pris = {};
+    d.repas.forEach(function (r) { pris[r.creneau] = true; });
+    (d.creneaux || []).filter(function (c) { return !pris[c]; }).forEach(function (c) { rejetes[c] = true; });
+    var rates = enAttenteDe.filter(function (c) { return !pris[c]; });
+    var notice = $('planNotice');
+    if (rates.length) { notice.textContent = t('notice', rates.map(slotLabel).join(', ')); notice.classList.add('on'); }
+    else notice.classList.remove('on');
+    enAttenteDe = [];
+    rendrePlan();
+    majVue();
+    afficher('ecranPlan');
+  }
+  function toutesLesCases() {
+    var par = {};
+    plan.repas.forEach(function (r) { par[r.creneau] = r; });
+    var ordre = (plan.creneaux && plan.creneaux.length ? plan.creneaux : plan.repas.map(function (r) { return r.creneau; })).slice();
+    ordre.sort(function (a, b) {
+      var pa = a.split('_'), pb = b.split('_');
+      return (JOURS.indexOf(pa[0]) * 2 + (pa[1] === 'soir')) - (JOURS.indexOf(pb[0]) * 2 + (pb[1] === 'soir'));
+    });
+    return ordre.map(function (c) { return { creneau: c, repas: par[c] || null }; });
+  }
+  function parSlotRepas() { var m = {}; plan.repas.forEach(function (r) { m[r.creneau] = r; }); return m; }
+  function rejeteEffectif(c) {
+    if (rejetes[c]) return true;
+    return estReste(c, plan.restes, plan.creneaux || []) && !!rejetes[dinerVeille(c)] && !!parSlotRepas()[c];
+  }
+  function imgTag(r) {
+    if (!r || !r.image) return '';
+    var small = r.spoonacular_id ? 'https://img.spoonacular.com/recipes/' + r.spoonacular_id + '-312x231.jpg' : '';
+    return '<img src="' + esc(r.image) + '" alt="' + esc(r.plat) + '" loading="lazy" onerror="if(this.dataset.f!==\'1\'&&\'' + small + '\'){this.dataset.f=\'1\';this.src=\'' + small + '\'}else{this.remove()}">';
+  }
+  var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  var ICON_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-2"/></svg>';
+
+  function rendrePlan() {
+    var cases = toutesLesCases();
+    var gardes = plan.repas.filter(function (r) { return !rejeteEffectif(r.creneau) && r.calories; });
+    $('nutri').textContent = gardes.length ? t('nutri_line',
+      Math.round(gardes.reduce(function (s, r) { return s + r.calories; }, 0) / gardes.length),
+      Math.round(gardes.reduce(function (s, r) { return s + (r.proteines || 0); }, 0) / gardes.length)) : '';
+    var cout = plan.repas.reduce(function (s, r) { return s + (rejeteEffectif(r.creneau) ? 0 : (Number(r.cout_estime) || 0)); }, 0);
+    var budget = Number(plan.budget) || 0;
+    $('meterFill').style.width = (budget ? Math.min(100, cout / budget * 100) : 0) + '%';
+    $('meterFill').classList.toggle('over', !!budget && cout > budget);
+    $('meterCost').textContent = t('so_far', euros(cout));
+    $('meterBudget').textContent = t('budget_x', euros(budget));
+
+    var parSlot = {};
+    cases.forEach(function (c) { parSlot[c.creneau] = c; });
+    var w = '';
+    JOURS.forEach(function (j) {
+      w += '<div class="col"><span class="dn">' + t('days_s')[j] + '</span>';
+      ['midi','soir'].forEach(function (m) {
+        var c = parSlot[j + '_' + m];
+        if (!c) { w += '<span class="cell off"></span>'; return; }
+        w += '<button class="cell' + (rejeteEffectif(c.creneau) ? ' rej' : '') + (c.repas ? '' : ' empty') + '" data-go="' + c.creneau + '" aria-label="' + esc(slotLabel(c.creneau) + (c.repas ? ': ' + c.repas.plat : '')) + '">' + imgTag(c.repas) + '</button>';
+      });
+      w += '</div>';
+    });
+    $('week').innerHTML = w;
+
+    var np = Number(plan.personnes) || 1;
+    var h = '';
+    cases.forEach(function (c) {
+      var r = c.repas, rej = rejeteEffectif(c.creneau);
+      var etiquette = '<span class="slot-name">' + esc(slotLabel(c.creneau)) + '</span>';
+      if (!r) {
+        h += '<article class="card empty" id="c-' + c.creneau + '">' +
+          '<button class="x" data-rej="' + c.creneau + '" aria-label="' + esc(slotLabel(c.creneau)) + '">' + (rej ? ICON_UNDO : ICON_X) + '</button>' +
+          '<div class="photo"><p>' + t('no_meal') + '</p>' + etiquette + '</div>' +
+          '<div class="card-body"><h4>' + t('empty_slot') + '</h4><p class="why">' + (rej ? t('empty_rej') : t('empty_hint')) + '</p></div></article>';
+        return;
+      }
+      var nutriPills = (r.calories ? '<span class="pill k">' + r.calories + ' kcal</span>' : '') + (r.proteines ? '<span class="pill p">' + r.proteines + ' ' + t('protein') + '</span>' : '');
+      if (estReste(c.creneau, plan.restes, plan.creneaux || [])) {
+        var dv = jour(dinerVeille(c.creneau));
+        h += '<article class="card leftover' + (rej ? ' rejected' : '') + '" id="c-' + c.creneau + '">' +
+          '<span class="leftover-tag">' + t('leftovers') + '</span><span class="stamp" aria-hidden="true">' + t('swap_me') + '</span>' +
+          '<div class="photo">' + imgTag(r) + etiquette + '</div>' +
+          '<div class="card-body"><h4>' + esc(r.plat) + '</h4><div class="facts"><span class="pill t">' + t('reheat') + '</span><span class="pill">' + t('paid') + '</span>' + nutriPills + '</div>' +
+          '<p class="why">' + (rej ? t('changes_with', dv) : t('from_dinner', dv)) + '</p></div></article>';
+        return;
+      }
+      var ing = (r.ingredients || []).map(function (i) { return '<li><span>' + esc(i.nom) + '</span><span>' + esc(qte(i.quantite, i.unite)) + '</span></li>'; }).join('');
+      var twice = /_soir$/.test(c.creneau) && estReste(dejeunerLendemain(c.creneau) || '', plan.restes, plan.creneaux || []);
+      h += '<article class="card' + (rej ? ' rejected' : '') + '" id="c-' + c.creneau + '">' +
+        '<button class="x" data-rej="' + c.creneau + '" aria-label="' + esc(r.plat) + '">' + (rej ? ICON_UNDO : ICON_X) + '</button>' +
+        '<span class="stamp" aria-hidden="true">' + t('swap_me') + '</span>' +
+        '<div class="photo">' + imgTag(r) + etiquette + '</div>' +
+        '<div class="card-body"><h4>' + esc(r.plat) + '</h4>' +
+        '<div class="facts">' + (r.temps ? '<span class="pill t">' + r.temps + ' min</span>' : '') + '<span class="pill">' + euros(r.cout_estime) + '</span>' + nutriPills + '</div>' +
+        (r.pourquoi ? '<p class="why">' + esc(r.pourquoi) + '</p>' : '') +
+        (ing ? '<details><summary>' + t('ingr_for', (r.ingredients || []).length, np, twice) + '</summary><ul>' + ing + '</ul></details>' : '') +
+        (r.lien ? '<a class="recipe-link" href="' + esc(r.lien) + '" target="_blank" rel="noopener">' + t('view_recipe') + '</a>' : '') +
+        '</div></article>';
+    });
+    $('rail').innerHTML = h;
+    if (vue === 'calendrier') rendreCalendrier();
+    majCompteur();
+    rendreDock();
+  }
+  var vue = 'cartes';
+  // Real week grid: one column per day, one row per meal time.
+  function rendreCalendrier() {
+    var par = {};
+    plan.repas.forEach(function (r) { par[r.creneau] = r; });
+    var creneaux = plan.creneaux && plan.creneaux.length ? plan.creneaux : plan.repas.map(function (r) { return r.creneau; });
+    var jours = JOURS.filter(function (j) { return creneaux.some(function (c) { return c.split('_')[0] === j; }); });
+    var moments = ['midi', 'soir'].filter(function (m) { return creneaux.some(function (c) { return c.split('_')[1] === m; }); });
+    var h = '<table><thead><tr><th class="corner"></th>' +
+      jours.map(function (j) { return '<th>' + t('days_s')[j] + '</th>'; }).join('') + '</tr></thead><tbody>';
+    moments.forEach(function (m) {
+      h += '<tr><td class="hour">' + t('moments')[m] + '</td>';
+      jours.forEach(function (j) {
+        var c = j + '_' + m, prevu = creneaux.indexOf(c) !== -1, r = par[c];
+        if (!prevu) { h += '<td class="slot vide"></td>'; return; }
+        if (!r) { h += '<td class="slot vide"><small>' + t('no_meal') + '</small></td>'; return; }
+        var reste = estReste(c, plan.restes, creneaux);
+        h += '<td class="slot' + (reste ? ' reste' : '') + '">' + imgTag(r) +
+          '<b>' + esc(r.plat) + '</b><small>' + (reste ? t('leftovers') : (r.temps ? r.temps + ' min' : '') + (r.cout_estime ? ' · ' + euros(r.cout_estime) : '')) + '</small></td>';
+      });
+      h += '</tr>';
+    });
+    $('cal').innerHTML = h + '</tbody></table>';
+  }
+  function majVue() {
+    var cal = vue === 'calendrier';
+    $('vueCartes').setAttribute('aria-pressed', String(!cal));
+    $('vueCal').setAttribute('aria-pressed', String(cal));
+    document.querySelector('.rail-wrap').hidden = cal;
+    document.querySelector('.rail-nav').style.display = cal ? 'none' : '';
+    $('week').style.display = cal ? 'none' : '';
+    $('cal').hidden = !cal;
+    if (cal && plan) rendreCalendrier();
+  }
+
+  function majCompteur() {
+    var rail = $('rail'), cards = rail.querySelectorAll('.card');
+    if (!cards.length) return;
+    var w = cards[0].getBoundingClientRect().width + 18;
+    $('railCount').textContent = t('count', Math.min(cards.length, Math.round(rail.scrollLeft / w) + 1), cards.length);
+  }
+
+  // ---------- dock ----------
+  function rendreDock() {
+    var h = '', box = $('dockInner');
+    if (ecran === 'ecranForm') {
+      var sl = slotsChoisis(), n = sl.length, p = personnes();
+      var aCuire = sl.filter(function (c) { return !estReste(c, $('leftovers').checked, sl); }).length;
+      h = '<span class="dock-sum">' + t('meals_n', n) + (aCuire < n ? ', ' + t('to_cook', aCuire) : '') + '<small>' + t('dock_for', p, $('budget').value) + '</small></span>' +
+          '<button class="btn btn-main submit" id="dPlan">' + t('plan_btn') + '</button>';
+      box.innerHTML = h; $('dPlan').onclick = envoyer; return;
+    }
+    if (ecran !== 'ecranPlan' || !plan) { box.innerHTML = ''; return; }
+    var k = Object.keys(rejetes).length;
+    h = k > 0
+      ? '<button class="btn shrink" id="dClear">' + t('keep_all') + '</button><button class="btn btn-coral" id="dReplace">' + t('swap_n', k) + '</button>'
+      : '<button class="btn btn-main" id="dList">' + (listeAJour ? t('view_list') : t('gen_list')) + '</button>';
+    box.innerHTML = h;
+    if (k > 0) { $('dClear').onclick = function () { rejetes = {}; rendrePlan(); }; $('dReplace').onclick = remplacer; }
+    else $('dList').onclick = ouvrirListe;
+  }
+  function remplacer() {
+    var creneaux = Object.keys(rejetes);
+    var btn = $('dReplace'); btn.disabled = true; btn.textContent = t('sending');
+    fetch(URL_REMPLACER, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: ref, creneaux: creneaux }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { erreur(d.message || t('err_swap')); return; }
+        enAttenteDe = creneaux; liste = null; listeAJour = false;
+        attente('w_swap');
+        poll(URL_STATUT, function (x) { return x.statut === 'plan_genere' && x.repas; }, montrerPlan, erreur);
+      })
+      .catch(function () { erreur(t('err_try')); });
+  }
+
+  // ---------- shopping list ----------
+  function ouvrirListe() {
+    if (listeAJour && liste) { montrerListe(liste); return; }
+    attente('w_list');
+    var suite = function () { poll(URL_COURSES, function (d) { return d.statut === 'prete'; }, function (d) { liste = d; listeAJour = true; montrerListe(d); }, erreur); };
+    if (listeAJour) { suite(); return; }
+    fetch(URL_VALIDER, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: ref }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d.ok === false) { erreur(d.message || t('err_list')); return; } suite(); })
+      .catch(function () { erreur(t('err_try')); });
+  }
+  function montrerListe(d) {
+    var coches = {};
+    try { coches = JSON.parse(localStorage.getItem('mp-coches-' + ref) || '{}'); } catch (e) {}
+    var aAcheter = d.courses.filter(function (c) { return c.a_acheter; });
+    var dejaLa = d.courses.filter(function (c) { return !c.a_acheter; });
+    $('listSum').textContent = t('list_sum', aAcheter.length, euros(d.cout_total));
+    var h = '';
+    RAYONS.forEach(function (ry) {
+      var items = aAcheter.filter(function (c) { return (c.rayon || 'autre') === ry; });
+      if (!items.length) return;
+      h += '<section class="aisle a-' + ry + '"><h3>' + t('aisles')[ry] + '<span>' + items.length + '</span></h3><ul class="items">';
+      items.forEach(function (c) {
+        var k = c.ingredient + '|' + c.quantite, on = !!coches[k];
+        h += '<li class="' + (on ? 'done' : '') + '"><input type="checkbox" data-k="' + esc(k) + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(c.ingredient) + '">' +
+          '<span class="n"><b>' + esc(c.ingredient) + '</b>' + (c.utilise_dans ? '<small>' + esc(c.utilise_dans) + '</small>' : '') + '</span>' +
+          '<span class="q">' + esc(qteTexte(c.quantite)) + (c.cout_estime ? '<br>' + euros(c.cout_estime) : '') + '</span></li>';
+      });
+      h += '</ul></section>';
+    });
+    $('aisles').innerHTML = h;
+    $('have').innerHTML = dejaLa.length ? '<b>' + t('have') + '</b> ' + dejaLa.map(function (c) { return esc(c.ingredient); }).join(', ') : '';
+    $('aisles').onchange = function (e) {
+      var i = e.target; if (!i.dataset.k) return;
+      if (i.checked) coches[i.dataset.k] = 1; else delete coches[i.dataset.k];
+      i.closest('li').classList.toggle('done', i.checked);
+      try { localStorage.setItem('mp-coches-' + ref, JSON.stringify(coches)); } catch (e2) {}
+    };
+    afficher('ecranCourses');
+  }
+  function texteListe() {
+    return RAYONS.map(function (ry) {
+      var items = liste.courses.filter(function (c) { return c.a_acheter && (c.rayon || 'autre') === ry; });
+      return items.length ? t('aisles')[ry] + '\n' + items.map(function (c) { return '- ' + c.ingredient + ' (' + qteTexte(c.quantite) + ')'; }).join('\n') : '';
+    }).filter(Boolean).join('\n\n');
+  }
+  function partager(bouton, donnees, texteCopie) {
+    var orig = bouton.textContent;
+    function dire(x) { bouton.textContent = x; setTimeout(function () { bouton.textContent = orig; }, 1800); }
+    if (navigator.share) { navigator.share(donnees).catch(function () {}); return; }
+    (navigator.clipboard ? navigator.clipboard.writeText(texteCopie) : Promise.reject()).then(function () { dire(t('copied')); }, function () { dire(t('cant_copy')); });
+  }
+  function calendrier() {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + (8 - d.getDay()) % 7);
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function stamp(dt, h, m) { return dt.getFullYear() + pad(dt.getMonth() + 1) + pad(dt.getDate()) + 'T' + pad(h) + pad(m) + '00'; }
+    function txt(s) { return String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n'); }
+    var ev = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meal planner//EN', 'CALSCALE:GREGORIAN'];
+    plan.repas.forEach(function (r) {
+      var p = r.creneau.split('_'), j = new Date(d); j.setDate(d.getDate() + JOURS.indexOf(p[0]));
+      var h = p[1] === 'midi' ? 12 : 19;
+      ev.push('BEGIN:VEVENT', 'UID:' + ref + '-' + r.creneau + '@meal-planner', 'DTSTAMP:' + stamp(new Date(), 0, 0) + 'Z',
+        'DTSTART:' + stamp(j, h, 30), 'DTEND:' + stamp(j, h + 1, 15),
+        'SUMMARY:' + txt((p[1] === 'midi' ? t('cal_l') : t('cal_d')) + r.plat), 'DESCRIPTION:' + txt((r.pourquoi || '') + (r.lien ? '\n' + r.lien : '')), 'END:VEVENT');
+    });
+    ev.push('END:VCALENDAR');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([ev.join('\r\n')], { type: 'text/calendar' }));
+    a.download = 'meal-plan.ics';
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function recommencer() {
+    arreterPolling();
+    document.querySelectorAll('.submit').forEach(function (x) { x.disabled = false; x.textContent = t('plan_btn'); });
+    setRef(null); plan = null; liste = null; listeAJour = false; rejetes = {};
+    afficher('ecranForm');
+  }
+
+  // ---------- wiring ----------
+  initChips('diet', majViande); initChips('cuisines'); initChips('temps');
+  initChips('nutrition'); initChips('niveau'); initChips('equipement');
+  initChips('allergies', function (b) {
+    if (b.dataset.v === '__autre') {
+      var on = b.getAttribute('aria-pressed') === 'true';
+      $('allergiesAutresBox').classList.toggle('on', on);
+      if (on) $('allergiesAutresBox').querySelector('input').focus();
+    }
+  });
+  // Desktop puts the title and its hint in a left column; wrap them once here.
+  document.querySelectorAll('.block').forEach(function (bl) {
+    var h3 = bl.querySelector(':scope>h3'), sub = bl.querySelector(':scope>.sub');
+    if (!h3) return;
+    var col = document.createElement('div');
+    col.className = 'lab-col';
+    bl.insertBefore(col, h3);
+    col.appendChild(h3); if (sub) col.appendChild(sub);
+  });
+  document.querySelectorAll('[data-tags]').forEach(initTags);
+  dessinerSlots();
+  $('slots').addEventListener('click', function (e) {
+    var b = e.target.closest('.slot'); if (!b) return;
+    b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+    majResume();
+  });
+  document.querySelectorAll('[data-preset]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = b.dataset.preset;
+      $('slots').querySelectorAll('.slot').forEach(function (s) { s.setAttribute('aria-pressed', String(p === 'all' || (p === 'soir' && /_soir$/.test(s.dataset.v)))); });
+      majResume();
+    });
+  });
+  $('moins').onclick = function () { $('people').textContent = Math.max(1, personnes() - 1); majResume(); };
+  $('plus').onclick = function () { $('people').textContent = Math.min(12, personnes() + 1); majResume(); };
+  $('mfMoins').onclick = function () { $('meatFree').textContent = Math.max(0, (Number($('meatFree').textContent) || 0) - 1); };
+  $('mfPlus').onclick = function () { $('meatFree').textContent = Math.min(7, (Number($('meatFree').textContent) || 0) + 1); };
+  $('budget').addEventListener('input', majResume);
+  $('leftovers').addEventListener('change', majResume);
+  ['lunchbox','frigo','meatFree','diet','nutrition','niveau','temps','cuisines','allergies','equipement'].forEach(function (id) {
+    var el = $(id); if (el) el.addEventListener('click', function () { setTimeout(majResume, 0); });
+  });
+  $('mfPlus').addEventListener('click', majResume);
+  $('mfMoins').addEventListener('click', majResume);
+
+  $('rail').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-rej]'); if (!b) return;
+    var c = b.dataset.rej;
+    if (rejetes[c]) delete rejetes[c]; else rejetes[c] = true;
+    var x = $('rail').scrollLeft; rendrePlan(); $('rail').scrollLeft = x;
+  });
+  $('rail').addEventListener('scroll', function () { window.requestAnimationFrame(majCompteur); }, { passive: true });
+  $('week').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-go]'); if (!b) return;
+    var card = $('c-' + b.dataset.go);
+    if (card) $('rail').scrollTo({ left: card.offsetLeft - 20, behavior: 'smooth' });
+  });
+  function pas(dir) { var card = $('rail').querySelector('.card'); if (card) $('rail').scrollBy({ left: dir * (card.getBoundingClientRect().width + 18), behavior: 'smooth' }); }
+  $('vueCartes').onclick = function () { vue = 'cartes'; majVue(); };
+  $('vueCal').onclick = function () { vue = 'calendrier'; majVue(); };
+  $('prev').onclick = function () { pas(-1); };
+  $('next').onclick = function () { pas(1); };
+
+  $('btnRetour').onclick = function () { if (plan) { rendrePlan(); afficher('ecranPlan'); } else recommencer(); };
+  $('btnErreurPlan').onclick = function () { if (plan) { rendrePlan(); afficher('ecranPlan'); } };
+  $('btnErreurReset').onclick = recommencer;
+  $('btnNouveau').onclick = recommencer;
+  $('btnNouveau2').onclick = recommencer;
+  $('weeksList').addEventListener('click', function (e) {
+    var ouvre = e.target.closest('[data-ref]'), courses = e.target.closest('[data-courses]');
+    if (!ouvre && !courses) return;
+    setRef(ouvre ? ouvre.dataset.ref : courses.dataset.courses);
+    plan = null; liste = null; listeAJour = false;
+    if (ouvre) { attendrePlan(); return; }
+    // Straight to that week's shopping list: it already exists, we only read it.
+    attente('w_list');
+    listeAJour = true;
+    poll(URL_COURSES, function (d) { return d.statut === 'prete'; },
+      function (d) { liste = d; montrerListe(d); },
+      function () { listeAJour = false; attendrePlan(); });
+  });
+  $('btnCopier').onclick = function () { if (liste) partager($('btnCopier'), { title: t('list_title'), text: t('list_title') + '\n\n' + texteListe() }, texteListe()); };
+  $('btnPartagerPlan').onclick = function () { var u = window.location.href; partager($('btnPartagerPlan'), { title: t('plan_t'), text: t('plan_share'), url: u }, u); };
+  $('btnCalendrier').onclick = calendrier;
+  // Open the bot in a new tab so the plan stays open behind it.
+  $('btnTelegram').onclick = function (e) {
+    var href = $('btnTelegram').href; if (!href) return;
+    e.preventDefault();
+    window.open(href, '_blank', 'noopener');
+  };
+  // Home: back to the form without leaving the site. The current plan stays reachable by its link.
+  $('btnAccueil').onclick = recommencer;
+  document.querySelectorAll('[data-lang]').forEach(function (b) {
+    b.onclick = function () { lang = b.dataset.lang; try { localStorage.setItem('mp-lang', lang); } catch (e) {} appliquerLangue(); };
+  });
+  document.querySelectorAll('[data-u]').forEach(function (b) {
+    b.onclick = function () { unites = b.dataset.u; try { localStorage.setItem('mp-unites', unites); } catch (e) {} majUnites(); };
+  });
+
+  function menu(on) {
+    $('menu').classList.toggle('on', on);
+    $('backdrop').classList.toggle('on', on);
+    $('btnMenu').setAttribute('aria-expanded', String(on));
+  }
+  $('btnMenu').onclick = function () { menu(!$('menu').classList.contains('on')); };
+  $('btnFermerMenu').onclick = function () { menu(false); };
+  $('backdrop').onclick = function () { menu(false); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu(false); });
+  chargerPrefs();
+  appliquerLangue();
+  if (sb) {
+    var hash = window.location.hash || '';
+    if (hash.indexOf('error') !== -1) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      setTimeout(function () { rendreAuth(t('link_dead'), true); menu(true); }, 300);
+    }
+    rendreAuth();
+    sb.auth.getSession().then(function (r) { appliquerSession((r.data || {}).session); });
+    sb.auth.onAuthStateChange(function (ev, s) {
+      if (ev === 'PASSWORD_RECOVERY') { recuperation = true; session = s || session; rendreAuth(); menu(true); return; }
+      appliquerSession(s);
+    });
+  }
+  $('btnUtiliserPrefs').onclick = utiliserPrefs;
+  majBoutonPrefs();
+  majUnites();
+  majViande();
+  afficher('ecranForm');
+  var r0 = new URL(window.location.href).searchParams.get('ref');
+  if (r0) { ref = r0; attendrePlan(); }
+})();
+</script>
+</body>
+</html>
