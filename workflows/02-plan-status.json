@@ -1,0 +1,320 @@
+{
+  "name": "Meal Prep — 2. Plan status",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "meal-prep-statut",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "c47bbca7-64c1-48af-8dcd-9d6cbcd3704b",
+      "name": "Status Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        128
+      ],
+      "webhookId": "x0000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupère la référence passée en paramètre d'URL : ?ref=MP-20260914-XXXXX\nconst ref = ($input.first().json.query || {}).ref || '';\nif (!ref) {\n  return [{ json: { valide: false, reference: '' } }];\n}\nreturn [{ json: { valide: true, reference: ref } }];"
+      },
+      "id": "124a311d-aaf6-4363-82af-39974153b01e",
+      "name": "Read Reference",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Reference} = '\" + $json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "6204b036-213c-4be4-a50c-a85c8c5ef34b",
+      "name": "Find Request",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        128
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s1",
+              "leftValue": "={{ $json.Statut }}",
+              "rightValue": "plan_genere",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "01d1a3b8-60af-4cd2-9b3f-71b4d40fb09f",
+              "leftValue": "={{ $json.Statut }}",
+              "rightValue": "validee",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a3adb828-5766-408c-863c-f3bf30808d1c",
+      "name": "Plan Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"AND({Demande} = '\" + $('Read Reference').first().json.reference + \"', {Statut} != 'refuse')\" }}",
+        "options": {}
+      },
+      "id": "b327a5b4-f2c2-42a7-95c4-4eb08e5241c1",
+      "name": "Fetch Meals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble la réponse envoyée au site quand le plan est prêt.\nconst demande = $('Find Request').first().json;\nconst lignes = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r.Creneau; });\n\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction rang(c) {\n  const p = String(c || '').split('_');\n  return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]);\n}\n\nconst repas = lignes.map(function (r) {\n  let ingredients = [];\n  try { ingredients = JSON.parse(r.Ingredients || '[]'); } catch (e) { ingredients = []; }\n  const id = Number(r['Spoonacular ID']) || null;\n  return {\n    creneau: r.Creneau,\n    jour: r.Jour,\n    moment: r.Moment,\n    plat: r.Plat,\n    spoonacular_id: id,\n    image: id ? 'https://img.spoonacular.com/recipes/' + id + '-636x393.jpg' : '',\n    lien: r['Lien recette'] || '',\n    pourquoi: r['Pourquoi ce plat'] || '',\n    cout_estime: r['Cout estime'] || 0,\n    calories: Number(r.Calories) || null,\n    proteines: Number(r.Proteines) || null,\n    temps: Number(r.Temps) || null,\n    ingredients: ingredients\n  };\n}).sort(function (a, b) { return rang(a.creneau) - rang(b.creneau); });\n\nconst total = repas.reduce(function (s, r) { return s + (Number(r.cout_estime) || 0); }, 0);\n\nreturn [{\n  json: {\n    ok: true,\n    statut: 'plan_genere',\n    statut_demande: demande.Statut,\n    reference: demande.Reference,\n    budget: demande.Budget,\n    personnes: demande.Personnes,\n    restes: (function () { try { return !!JSON.parse(demande['Payload brut'] || '{}').leftovers; } catch (e) { return false; } })(),\n    creneaux: String(demande.Creneaux || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean),\n    cout_total: Math.round(total * 100) / 100,\n    repas: repas\n  }\n}];\n"
+      },
+      "id": "8565e03f-a954-4d40-b6f8-ad65c1c91708",
+      "name": "Build Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "37956dfa-0070-4d9d-bf5d-fe7c4b013700",
+      "name": "Reply Plan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Distingue trois cas : référence introuvable, génération échouée, génération en cours.\n// Sans ça, le site rappellerait indéfiniment sur une référence qui n'existe pas.\n\nconst d = $input.first().json || {};\n\nif (!d.Reference) {\n  return [{\n    json: {\n      ok: false,\n      statut: 'introuvable',\n      message: \"Aucune demande ne correspond à cette référence\"\n    }\n  }];\n}\n\nconst statut = d.Statut || 'inconnue';\n\nreturn [{\n  json: {\n    ok: true,\n    statut: statut,\n    reference: d.Reference,\n    message: statut === 'echec'\n      ? (d.Notes || 'La génération a échoué')\n      : 'Génération en cours'\n  }\n}];"
+      },
+      "id": "cdf67809-682f-403e-b3c0-5f536c6e55e0",
+      "name": "Build Pending",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f6572e58-4d51-46cd-9a6c-b461f4c4f078",
+      "name": "Reply Pending",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Status Request": {
+      "main": [
+        [
+          {
+            "node": "Read Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Reference": {
+      "main": [
+        [
+          {
+            "node": "Find Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Request": {
+      "main": [
+        [
+          {
+            "node": "Plan Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Ready?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Meals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Meals": {
+      "main": [
+        [
+          {
+            "node": "Build Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Plan": {
+      "main": [
+        [
+          {
+            "node": "Reply Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pending": {
+      "main": [
+        [
+          {
+            "node": "Reply Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "349593b0-f959-4ca9-80fa-310e60ed2912",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "FR5jAdHSGXWLt120",
+  "tags": []
+}

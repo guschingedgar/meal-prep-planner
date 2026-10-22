@@ -1,0 +1,1084 @@
+{
+  "name": "Meal Prep — 5. Replace meals (Groq)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meal-prep-remplacer",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "5150ac33-8ef1-42db-947b-912ab9f3f35c",
+      "name": "Swap Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2320,
+        192
+      ],
+      "webhookId": "r0000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le site envoie { reference, creneaux: [\"Lun_midi\", ...] } : les créneaux à remplacer.\nconst body = $input.first().json.body || {};\nconst reference = String(body.reference || '').trim();\nconst creneaux = Array.isArray(body.creneaux) ? body.creneaux.map(String) : [];\nreturn [{ json: { reference: reference, creneaux: creneaux } }];\n"
+      },
+      "id": "652dc0ba-99ed-475d-8f43-baf516c3069d",
+      "name": "Read Swap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2096,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Reference} = '\" + $json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "ee06f111-102d-4ec2-8851-ff1ea1692790",
+      "name": "Find Request",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1872,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Demande} = '\" + $('Read Swap').first().json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "579d522f-74b0-483c-8054-9ff2ff88a047",
+      "name": "Fetch Meals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1648,
+        192
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Shared: turn Spoonacular results into our recipe pool (quantities scaled, nutrition per person) ----\nfunction construirePool(recettes, personnes) {\n  return recettes.map(function (r) {\n    const facteur = personnes / (Number(r.servings) || personnes);\n    const nutr = ((r.nutrition || {}).nutrients || []);\n    const val = function (nom) { const n = nutr.find(function (x) { return x.name === nom; }); return n ? Math.round(n.amount) : null; };\n    const outils = [];\n    (r.analyzedInstructions || []).forEach(function (a) { (a.steps || []).forEach(function (s) { (s.equipment || []).forEach(function (e) { outils.push(String(e.name || '').toLowerCase()); }); }); });\n    return {\n      id: r.id, titre: r.title, temps_min: r.readyInMinutes,\n      lien: r.sourceUrl || ('https://spoonacular.com/recipes/' + r.id),\n      calories: val('Calories'), proteines: val('Protein'), outils: outils,\n      ingredients: (r.extendedIngredients || []).map(function (i) {\n        const m = (i.measures && i.measures.metric) ? i.measures.metric : null;\n        return { nom: i.nameClean || i.name, quantite: Math.round((Number(m ? m.amount : i.amount) || 0) * facteur * 100) / 100, unite: m ? (m.unitShort || m.unitLong || '') : (i.unit || '') };\n      })\n    };\n  });\n}\n\n// ---- Shared: equipment filter + \"use up my fridge\" ranking ----\nfunction affinerPool(pool, o, besoin) {\n  let p = pool;\n  const FOUR = /oven|baking sheet|baking pan|baking dish|roasting|casserole dish|muffin|loaf pan/;\n  const PLAQUE = /frying pan|skillet|pot|saucepan|wok|stove|grill pan|dutch oven/;\n  const filtre = p.filter(function (r) {\n    return !r.outils.some(function (x) { return (o.sansFour && FOUR.test(x)) || (o.sansPlaque && PLAQUE.test(x)); });\n  });\n  if (filtre.length >= Math.max(besoin, 3)) p = filtre; // keep enough candidates, the prompt still forbids the rest\n  const stock = String(o.stock || '').toLowerCase().split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n  p = p.map(function (r) {\n    const noms = r.ingredients.map(function (i) { return String(i.nom).toLowerCase(); });\n    const utilise = stock.filter(function (s) { return noms.some(function (n) { return n.indexOf(s) !== -1 || s.indexOf(n) !== -1; }); });\n    return Object.assign({}, r, { utilise: utilise });\n  });\n  if (o.frigo) p.sort(function (a, b) { return b.utilise.length - a.utilise.length; });\n  return p.slice(0, 30);\n}\n\n// ---- Shared: leftovers logic ----\nconst JOURS_ORDRE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nfunction diner_veille(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i > 0 ? JOURS_ORDRE[i - 1] + '_soir' : null; }\nfunction dejeuner_lendemain(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i >= 0 && i < 6 ? JOURS_ORDRE[i + 1] + '_midi' : null; }\nfunction estReste(c, restes, tous) { return !!restes && /_midi$/.test(c) && tous.indexOf(diner_veille(c)) !== -1; }\nfunction nourritReste(c, restes, tous) { return !!restes && /_soir$/.test(c) && tous.indexOf(dejeuner_lendemain(c)) !== -1; }\n\n// Decides what to replace. In leftovers mode, swapping a dinner also refreshes the\n// next day's leftover lunch; a leftover lunch alone is rebuilt from its (kept) dinner.\nconst demande = $('Find Request').first().json || {};\nconst demandeSite = $('Read Swap').first().json;\nconst lignes = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r.Creneau; });\n\nif (!demande.Reference) return [{ json: { ok: false, message: 'No request matches this reference' } }];\n\nlet brut = {}; try { brut = JSON.parse(demande['Payload brut'] || '{}'); } catch (e) {}\nconst restes = !!brut.leftovers;\nconst tous = String(demande.Creneaux || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);\nlet aRemplir = demandeSite.creneaux.filter(function (c) { return tous.indexOf(c) !== -1; });\naRemplir.slice().forEach(function (c) {\n  if (nourritReste(c, restes, tous)) { const l = dejeuner_lendemain(c); if (aRemplir.indexOf(l) === -1) aRemplir.push(l); }\n});\nif (aRemplir.length === 0) return [{ json: { ok: false, message: 'No meal selected to replace' } }];\n\nconst actives = lignes.filter(function (r) { return r.Statut !== 'refuse'; });\nconst parCreneau = {}; actives.forEach(function (r) { parCreneau[r.Creneau] = r; });\nconst idsRefus = actives.filter(function (r) { return aRemplir.indexOf(r.Creneau) !== -1; }).map(function (r) { return r.id; });\nconst gardes = actives.filter(function (r) { return aRemplir.indexOf(r.Creneau) === -1; }).map(function (r) { return r.Plat; });\nconst dejaVus = lignes.map(function (r) { return Number(r['Spoonacular ID']); }).filter(Boolean);\nconst run = lignes.reduce(function (m, r) { return Math.max(m, Number(r.Run) || 1); }, 1) + 1;\n\nconst dinersGardes = {};\naRemplir.filter(function (c) { return estReste(c, restes, tous); }).forEach(function (c) {\n  const d = diner_veille(c);\n  if (aRemplir.indexOf(d) === -1 && parCreneau[d]) {\n    const r = parCreneau[d];\n    dinersGardes[d] = { id: Number(r['Spoonacular ID']), titre: r.Plat, lien: r['Lien recette'] || '', calories: r.Calories || 0, proteines: r.Proteines || 0 };\n  }\n});\n\nlet cuisines = demande.Cuisines || [];\nif (!Array.isArray(cuisines)) cuisines = String(cuisines).split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n\nreturn [{ json: {\n  ok: true, recordId: demande.id, reference: demande.Reference, budget: demande.Budget,\n  personnes: Number(demande.Personnes) || 1, regime: demande.Regime || 'aucun', cuisines: cuisines,\n  stock: demande.Stock || '', payloadBrut: demande['Payload brut'] || '',\n  restes: restes, creneauxDemande: tous, creneaux: aRemplir, idsRefus: idsRefus,\n  gardes: gardes, dejaVus: dejaVus, dinersGardes: dinersGardes, run: run\n} }];\n"
+      },
+      "id": "f0758916-e83e-428a-bfc9-fb492ec393a0",
+      "name": "Plan Swap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eeaff1e2-b9e8-4d34-9a6f-546701c5d208",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "182a701a-a5a5-487b-9b8f-0fe391670806",
+      "name": "Swap Possible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1216,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, message: $json.message }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9dde1f53-4acf-4c5e-8ea6-2693e284081f",
+      "name": "Reply Refused",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -992,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Statut": "recue"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "a407cdcb-9810-4112-b6e7-6b22ad9552d5",
+      "name": "Mark Pending",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -992,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, message: 'Replacement started' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4308151c-05fe-41e0-b868-142a3f645ea9",
+      "name": "Reply Ack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -768,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per meal to mark as refused. Empty slots have nothing to mark:\n// we still return one item so the workflow keeps going.\nconst ctx = $('Plan Swap').first().json;\nif (ctx.idsRefus.length === 0) return [{ json: { rien: true } }];\nreturn ctx.idsRefus.map(function (id) { return { json: { id: id } }; });\n"
+      },
+      "id": "15c3e600-ebfc-4b84-9c6f-fe7b5a457a27",
+      "name": "List Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "67d48463-5e88-4bd6-94f4-fd494c327284",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a51186d9-9245-43c0-a7d6-3f510f09c98e",
+      "name": "Any Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -336,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Statut": "refuse"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "2e0965aa-6940-4015-9db5-3c4a6be4f691",
+      "name": "Mark Rejected",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -112,
+        48
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Shared: extra preferences stored in \"Payload brut\" (no new Airtable columns needed) ----\nfunction lirePreferences(payloadBrut) {\n  let b = {};\n  try { b = JSON.parse(payloadBrut || '{}'); } catch (e) { b = {}; }\n  const liste = function (x) { return Array.isArray(x) ? x.map(function (s) { return String(s).trim(); }).filter(Boolean) : []; };\n\n  const CUISINES_SPOON = {\n    'african':'African','africain':'African','american':'American','américain':'American','americain':'American',\n    'british':'British','anglais':'British','cajun':'Cajun','caribbean':'Caribbean','caribéen':'Caribbean','antillais':'Caribbean',\n    'chinese':'Chinese','chinois':'Chinese','eastern european':'Eastern European','european':'European','européen':'European',\n    'french':'French','français':'French','german':'German','allemand':'German','greek':'Greek','grec':'Greek',\n    'indian':'Indian','indien':'Indian','irish':'Irish','irlandais':'Irish','italian':'Italian','italien':'Italian',\n    'japanese':'Japanese','japonais':'Japanese','jewish':'Jewish','korean':'Korean','coréen':'Korean','coreen':'Korean',\n    'latin american':'Latin American','mediterranean':'Mediterranean','méditerranéen':'Mediterranean','mediterraneen':'Mediterranean',\n    'mexican':'Mexican','mexicain':'Mexican','middle eastern':'Middle Eastern','nordic':'Nordic','scandinave':'Nordic',\n    'southern':'Southern','spanish':'Spanish','espagnol':'Spanish','thai':'Thai','thaï':'Thai',\n    'vietnamese':'Vietnamese','vietnamien':'Vietnamese','asian':'Asian','asiatique':'Asian'\n  };\n  const cuisinesSpoon = [], cuisinesLibres = [];\n  liste(b.cuisines_extra).forEach(function (c) {\n    const k = CUISINES_SPOON[c.toLowerCase()];\n    if (k) cuisinesSpoon.push(k); else cuisinesLibres.push(c);\n  });\n\n  const INTOL = ['dairy','egg','gluten','grain','peanut','seafood','sesame','shellfish','soy','sulfite','tree nut','wheat'];\n  const allergies = liste(b.allergies).filter(function (a) { return INTOL.indexOf(a) !== -1; });\n  const allergiesAutres = liste(b.allergies_extra);\n  const eviter = liste(b.exclude);\n  const tempsMax = Number(b.max_time) || 0;\n  const restes = !!b.leftovers;\n  const lang = b.lang === 'fr' ? 'fr' : 'en';\n  const nutrition = b.nutrition || 'balanced';\n  const niveau = b.level || 'comfortable';\n  const equipement = Array.isArray(b.equipment) ? b.equipment : ['oven', 'hob'];\n  const sansFour = equipement.indexOf('oven') === -1 && equipement.indexOf('air_fryer') === -1;\n  const sansPlaque = equipement.indexOf('hob') === -1;\n  const lunchbox = !!b.lunchbox;\n  const sansViande = Math.max(0, Math.min(7, Number(b.meat_free) || 0));\n  const frigo = !!b.fridge_first;\n\n  const params = [].concat(\n    allergies.length ? ['intolerances=' + encodeURIComponent(allergies.join(','))] : [],\n    (eviter.length || allergiesAutres.length) ? ['excludeIngredients=' + encodeURIComponent(eviter.concat(allergiesAutres).join(','))] : [],\n    tempsMax ? ['maxReadyTime=' + tempsMax] : [],\n    nutrition === 'protein' ? ['minProtein=25'] : [],\n    nutrition === 'light' ? ['maxCalories=550'] : [],\n    (sansFour || sansPlaque) ? ['addRecipeInstructions=true'] : []\n  );\n\n  const outils = { oven: 'an oven', hob: 'a hob', microwave: 'a microwave', air_fryer: 'an air fryer', blender: 'a blender',\n    food_processor: 'a food processor', slow_cooker: 'a slow cooker', pressure_cooker: 'a pressure cooker', rice_cooker: 'a rice cooker', grill: 'a grill or barbecue' };\n  const equipAutres = liste(b.equipment_extra);\n  const lignes = [].concat(\n    (allergies.length || allergiesAutres.length) ? ['- ALLERGIES, never include: ' + allergies.concat(allergiesAutres).join(', ')] : [],\n    eviter.length ? ['- Foods the user does not eat: ' + eviter.join(', ')] : [],\n    tempsMax ? ['- Maximum cooking time: ' + tempsMax + ' minutes'] : [],\n    cuisinesLibres.length ? ['- Also enjoys these cuisines: ' + cuisinesLibres.join(', ')] : [],\n    nutrition === 'protein' ? ['- Nutrition focus: high protein, favour recipes with the most protein.'] : [],\n    nutrition === 'light' ? ['- Nutrition focus: lighter meals, favour lower-calorie recipes.'] : [],\n    niveau === 'beginner' ? ['- The cook is a BEGINNER: pick simple recipes with few ingredients and basic techniques, nothing technical.'] : [],\n    niveau === 'confident' ? ['- The cook is confident: more elaborate recipes are welcome.'] : [],\n    ['- Kitchen equipment available: ' + (equipement.map(function (e) { return outils[e]; }).filter(Boolean).concat(equipAutres).join(', ') || 'very basic') + ', plus basic tools (knives, bowls). Never pick a recipe that needs equipment not in this list.'],\n    equipement.some(function (e) { return ['slow_cooker', 'pressure_cooker', 'rice_cooker'].indexOf(e) !== -1; }) ? ['- Recipes that make good use of their slow cooker, pressure cooker or rice cooker are a plus.'] : [],\n    equipement.indexOf('air_fryer') !== -1 ? ['- Air fryer available: air-fryer friendly recipes are a plus.'] : [],\n    lunchbox ? ['- Lunches are eaten away from home: lunch dishes must travel well in a lunch box and taste good cold or reheated in a microwave.'] : [],\n    sansViande ? ['- Make ' + sansViande + ' day(s) of the week fully meat-free (no meat, no fish), spread across the week.'] : [],\n    frigo ? ['- USE UP THE PANTRY: build the week around the pantry ingredients, the recipes using the most of them come first.'] : [],\n    lang === 'fr' ? ['- Language: write every titre (the dish name, translated naturally) and every pourquoi in French.'] : []\n  );\n\n  return {\n    cuisinesSpoon: cuisinesSpoon, restes: restes, lang: lang, frigo: frigo, sansFour: sansFour, sansPlaque: sansPlaque,\n    params: params, lignesPrompt: lignes\n  };\n}\n\n// ⚠️ Même clé que dans le workflow 1\nconst SPOONACULAR_KEY = 'YOUR_SPOONACULAR_API_KEY';\nconst ctx = $('Plan Swap').first().json;\n\nconst regimes = { 'aucun': '', 'vegetarien': 'vegetarian', 'vegan': 'vegan', 'sans_gluten': 'gluten free', 'sans_lactose': 'dairy free' };\nconst cuisinesMap = { 'italien': 'Italian', 'asiatique': 'Asian', 'francais': 'French', 'mexicain': 'Mexican', 'moyen_orient': 'Middle Eastern', 'indien': 'Indian' };\n\nconst prefs = lirePreferences(ctx.payloadBrut);\nconst cuisines = ctx.cuisines.map(function (c) { return cuisinesMap[c]; }).filter(Boolean)\n  .concat(prefs.cuisinesSpoon).filter(function (c, i, a) { return a.indexOf(c) === i; }).join(',');\n\n// sort=random so each replacement round brings new candidates.\nconst parts = [\n  'apiKey=' + encodeURIComponent(SPOONACULAR_KEY),\n  prefs.frigo ? 'number=60' : 'number=40',\n  'addRecipeInformation=true',\n  'fillIngredients=true',\n  'addRecipeNutrition=true',\n  'sort=random'\n];\nconst regime = regimes[ctx.regime] || '';\nif (regime) parts.push('diet=' + encodeURIComponent(regime));\nif (cuisines) parts.push('cuisine=' + encodeURIComponent(cuisines));\nprefs.params.forEach(function (p) { parts.push(p); });\n\nreturn [{ json: { lignesPrefs: prefs.lignesPrompt, lang: prefs.lang, frigo: prefs.frigo, sansFour: prefs.sansFour, sansPlaque: prefs.sansPlaque, url: 'https://api.spoonacular.com/recipes/complexSearch?' + parts.join('&') } }];\n"
+      },
+      "id": "32b0e381-813f-4892-b66f-0b4c0588d75c",
+      "name": "Build Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        192
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "c8b32604-c9c3-47eb-a86c-8743657f5816",
+      "name": "Search Recipes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        112,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Shared: turn Spoonacular results into our recipe pool (quantities scaled, nutrition per person) ----\nfunction construirePool(recettes, personnes) {\n  return recettes.map(function (r) {\n    const facteur = personnes / (Number(r.servings) || personnes);\n    const nutr = ((r.nutrition || {}).nutrients || []);\n    const val = function (nom) { const n = nutr.find(function (x) { return x.name === nom; }); return n ? Math.round(n.amount) : null; };\n    const outils = [];\n    (r.analyzedInstructions || []).forEach(function (a) { (a.steps || []).forEach(function (s) { (s.equipment || []).forEach(function (e) { outils.push(String(e.name || '').toLowerCase()); }); }); });\n    return {\n      id: r.id, titre: r.title, temps_min: r.readyInMinutes,\n      lien: r.sourceUrl || ('https://spoonacular.com/recipes/' + r.id),\n      calories: val('Calories'), proteines: val('Protein'), outils: outils,\n      ingredients: (r.extendedIngredients || []).map(function (i) {\n        const m = (i.measures && i.measures.metric) ? i.measures.metric : null;\n        return { nom: i.nameClean || i.name, quantite: Math.round((Number(m ? m.amount : i.amount) || 0) * facteur * 100) / 100, unite: m ? (m.unitShort || m.unitLong || '') : (i.unit || '') };\n      })\n    };\n  });\n}\n\n// ---- Shared: equipment filter + \"use up my fridge\" ranking ----\nfunction affinerPool(pool, o, besoin) {\n  let p = pool;\n  const FOUR = /oven|baking sheet|baking pan|baking dish|roasting|casserole dish|muffin|loaf pan/;\n  const PLAQUE = /frying pan|skillet|pot|saucepan|wok|stove|grill pan|dutch oven/;\n  const filtre = p.filter(function (r) {\n    return !r.outils.some(function (x) { return (o.sansFour && FOUR.test(x)) || (o.sansPlaque && PLAQUE.test(x)); });\n  });\n  if (filtre.length >= Math.max(besoin, 3)) p = filtre; // keep enough candidates, the prompt still forbids the rest\n  const stock = String(o.stock || '').toLowerCase().split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n  p = p.map(function (r) {\n    const noms = r.ingredients.map(function (i) { return String(i.nom).toLowerCase(); });\n    const utilise = stock.filter(function (s) { return noms.some(function (n) { return n.indexOf(s) !== -1 || s.indexOf(n) !== -1; }); });\n    return Object.assign({}, r, { utilise: utilise });\n  });\n  if (o.frigo) p.sort(function (a, b) { return b.utilise.length - a.utilise.length; });\n  return p.slice(0, 30);\n}\n\n// ---- Shared: leftovers logic ----\nconst JOURS_ORDRE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nfunction diner_veille(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i > 0 ? JOURS_ORDRE[i - 1] + '_soir' : null; }\nfunction dejeuner_lendemain(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i >= 0 && i < 6 ? JOURS_ORDRE[i + 1] + '_midi' : null; }\nfunction estReste(c, restes, tous) { return !!restes && /_midi$/.test(c) && tous.indexOf(diner_veille(c)) !== -1; }\nfunction nourritReste(c, restes, tous) { return !!restes && /_soir$/.test(c) && tous.indexOf(dejeuner_lendemain(c)) !== -1; }\n\n// Builds the compact prompt for the cooking slots only (leftover lunches are copied later).\nfunction construirePrompt(o) {\n  const cuisson = o.aRemplir.filter(function (c) { return !estReste(c, o.restes, o.creneauxDemande); });\n  const doubles = cuisson.filter(function (c) { return nourritReste(c, o.restes, o.creneauxDemande); });\n  const lignes = o.pool.map(function (r) {\n    return r.id + ' | ' + r.titre + ' | ' + r.temps_min + ' min | ' + (r.proteines ? r.proteines + ' g protein | ' : '') +\n      r.ingredients.map(function (i) { return i.nom; }).join(', ') + (o.frigo && r.utilise && r.utilise.length ? ' | uses pantry: ' + r.utilise.join(', ') : '');\n  });\n  const ex = { creneau: cuisson[0] || 'Lun_soir', recette_id: o.pool[0].id };\n  if (o.lang === 'fr') ex.titre = 'Nom du plat en français';\n  ex.pourquoi = o.lang === 'fr' ? 'Une phrase courte.' : 'One short sentence.';\n  ex.cout_estime = 6.5;\n  const prompt = [o.intro,\n    \"- Budget for the whole week: \" + o.budget + \" euros for \" + o.personnes + \" people\",\n    \"- Diet: \" + o.regime,\n    o.notes ? \"- Also take into account: \" + o.notes : \"\",\n    o.stock ? \"- Already in the pantry (prefer recipes using these): \" + o.stock : \"\"\n  ].concat(o.lignesPrefs || []).concat([\n    o.gardes && o.gardes.length ? \"- Meals already kept this week (avoid similar dishes): \" + o.gardes.join('; ') : \"\",\n    doubles.length ? \"- These dinners are cooked in double to become the next day's lunch, so pick dishes that keep and reheat well (stews, curries, bakes, grain salads): \" + doubles.join(', ') : \"\",\n    \"\",\n    \"Slots to fill (exactly one recipe each): \" + cuisson.join(', '),\n    \"\",\n    \"Candidate recipes (id | title | time | protein per serving | ingredients). Use ONLY these ids:\",\n    lignes.join('\\n'),\n    \"\",\n    \"Rules: never repeat a recipe; vary dish types and proteins; reuse ingredients across meals to save money; longer recipes on evenings/weekend; cout_estime is the cost in euros of that meal for \" + o.personnes + \" people (one serving each).\",\n    \"JSON format (one entry per slot in \\\"repas\\\", pourquoi max 15 words):\",\n    JSON.stringify({ repas: [ex] })\n  ]).filter(Boolean).join('\\n');\n  return {\n    cuisson: cuisson,\n    corpsLLM: {\n      model: 'openai/gpt-oss-120b', max_tokens: 6000, reasoning_effort: 'low', temperature: 0.4,\n      response_format: { type: 'json_object' },\n      messages: [\n        { role: 'system', content: 'You are a meal-planning assistant. You always answer with a single valid JSON object and nothing else.' },\n        { role: 'user', content: prompt }\n      ]\n    }\n  };\n}\n\nconst ctx = $('Plan Swap').first().json;\nconst req = $('Build Search').first().json;\nconst rep = $input.first().json;\nconst statut = rep.statusCode;\nconst corps = rep.body || {};\nfunction echec(raison) { return [{ json: { echec: true, raison: raison, recordId: ctx.recordId } }]; }\nif (statut === 402) return echec(\"Quota Spoonacular épuisé pour aujourd'hui\");\nif (statut !== 200) return echec('Spoonacular a répondu ' + statut);\n\nconst vus = {}; ctx.dejaVus.forEach(function (id) { vus[id] = true; });\nconst cuissonPrevue = ctx.creneaux.filter(function (c) { return !estReste(c, ctx.restes, ctx.creneauxDemande); });\nconst pool = affinerPool(construirePool((corps.results || []).filter(function (r) { return !vus[r.id]; }), ctx.personnes),\n  { sansFour: req.sansFour, sansPlaque: req.sansPlaque, frigo: req.frigo, stock: ctx.stock }, cuissonPrevue.length);\nif (pool.length < cuissonPrevue.length) return echec('Plus assez de nouvelles recettes pour ces critères (' + pool.length + ' trouvée(s)). Assouplis un filtre.');\n\nconst p = construirePrompt({\n  intro: \"The user rejected some meals of their weekly plan. Pick replacements. Answer ONLY with a JSON object.\",\n  aRemplir: ctx.creneaux, creneauxDemande: ctx.creneauxDemande, restes: ctx.restes, lang: req.lang, frigo: req.frigo,\n  pool: pool.length ? pool : [{ id: 0, titre: '', temps_min: 0, ingredients: [] }],\n  budget: ctx.budget, personnes: ctx.personnes, regime: ctx.regime, stock: ctx.stock,\n  lignesPrefs: req.lignesPrefs, gardes: ctx.gardes\n});\nreturn [{ json: {\n  echec: false, recordId: ctx.recordId, reference: ctx.reference, run: ctx.run, lang: req.lang,\n  creneauxDemande: ctx.creneauxDemande, aRemplir: ctx.creneaux, cuisson: p.cuisson,\n  restes: ctx.restes, dinersGardes: ctx.dinersGardes, pool: pool, corpsLLM: p.corpsLLM\n} }];\n"
+      },
+      "id": "adcda115-5a61-46b3-b33a-cef2a1535ef0",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7a32cd4c-a071-4e46-9a62-5c0687db3a28",
+              "leftValue": "={{ $json.echec }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f53f8178-f539-4245-b398-7131f86211d5",
+      "name": "Pool Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.corpsLLM) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "ff60d532-6797-4353-8a94-a8619304f625",
+      "name": "Groq Swap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        768,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VTwcPABWORgXqCGf",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Prompt').first().json;\n\n// ---- Shared: turn Spoonacular results into our recipe pool (quantities scaled, nutrition per person) ----\nfunction construirePool(recettes, personnes) {\n  return recettes.map(function (r) {\n    const facteur = personnes / (Number(r.servings) || personnes);\n    const nutr = ((r.nutrition || {}).nutrients || []);\n    const val = function (nom) { const n = nutr.find(function (x) { return x.name === nom; }); return n ? Math.round(n.amount) : null; };\n    const outils = [];\n    (r.analyzedInstructions || []).forEach(function (a) { (a.steps || []).forEach(function (s) { (s.equipment || []).forEach(function (e) { outils.push(String(e.name || '').toLowerCase()); }); }); });\n    return {\n      id: r.id, titre: r.title, temps_min: r.readyInMinutes,\n      lien: r.sourceUrl || ('https://spoonacular.com/recipes/' + r.id),\n      calories: val('Calories'), proteines: val('Protein'), outils: outils,\n      ingredients: (r.extendedIngredients || []).map(function (i) {\n        const m = (i.measures && i.measures.metric) ? i.measures.metric : null;\n        return { nom: i.nameClean || i.name, quantite: Math.round((Number(m ? m.amount : i.amount) || 0) * facteur * 100) / 100, unite: m ? (m.unitShort || m.unitLong || '') : (i.unit || '') };\n      })\n    };\n  });\n}\n\n// ---- Shared: equipment filter + \"use up my fridge\" ranking ----\nfunction affinerPool(pool, o, besoin) {\n  let p = pool;\n  const FOUR = /oven|baking sheet|baking pan|baking dish|roasting|casserole dish|muffin|loaf pan/;\n  const PLAQUE = /frying pan|skillet|pot|saucepan|wok|stove|grill pan|dutch oven/;\n  const filtre = p.filter(function (r) {\n    return !r.outils.some(function (x) { return (o.sansFour && FOUR.test(x)) || (o.sansPlaque && PLAQUE.test(x)); });\n  });\n  if (filtre.length >= Math.max(besoin, 3)) p = filtre; // keep enough candidates, the prompt still forbids the rest\n  const stock = String(o.stock || '').toLowerCase().split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n  p = p.map(function (r) {\n    const noms = r.ingredients.map(function (i) { return String(i.nom).toLowerCase(); });\n    const utilise = stock.filter(function (s) { return noms.some(function (n) { return n.indexOf(s) !== -1 || s.indexOf(n) !== -1; }); });\n    return Object.assign({}, r, { utilise: utilise });\n  });\n  if (o.frigo) p.sort(function (a, b) { return b.utilise.length - a.utilise.length; });\n  return p.slice(0, 30);\n}\n\n// ---- Shared: leftovers logic ----\nconst JOURS_ORDRE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nfunction diner_veille(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i > 0 ? JOURS_ORDRE[i - 1] + '_soir' : null; }\nfunction dejeuner_lendemain(c) { const p = c.split('_'); const i = JOURS_ORDRE.indexOf(p[0]); return i >= 0 && i < 6 ? JOURS_ORDRE[i + 1] + '_midi' : null; }\nfunction estReste(c, restes, tous) { return !!restes && /_midi$/.test(c) && tous.indexOf(diner_veille(c)) !== -1; }\nfunction nourritReste(c, restes, tous) { return !!restes && /_soir$/.test(c) && tous.indexOf(dejeuner_lendemain(c)) !== -1; }\n\n// Parses the Groq answer, re-attaches recipe data, doubles dinners that feed\n// tomorrow's lunch, and writes leftover lunches as copies of that dinner.\nconst rep = $input.first().json;\nfunction echec(raison) { return [{ json: { echec: true, raison: raison, recordId: ctx.recordId } }]; }\nif (rep.error) return echec('Groq : ' + (rep.error.message || JSON.stringify(rep.error)).slice(0, 200));\n\nlet proposes = [];\nif (ctx.cuisson.length) {\n  const choix = (rep.choices || [])[0];\n  if (!choix || !choix.message) return echec(\"Groq n'a pas renvoyé de réponse\");\n  if (choix.finish_reason === 'length') return echec('Réponse tronquée (max_tokens)');\n  try {\n    const sortie = JSON.parse(String(choix.message.content || '').replace(/```json|```/g, '').trim());\n    proposes = Array.isArray(sortie.repas) ? sortie.repas : [];\n  } catch (e) { return echec('JSON invalide renvoyé par Groq'); }\n}\n\nconst FR = ctx.lang === 'fr';\nconst JOURS = FR ? { Lun: 'lundi', Mar: 'mardi', Mer: 'mercredi', Jeu: 'jeudi', Ven: 'vendredi', Sam: 'samedi', Dim: 'dimanche' }\n                 : { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst TXT = FR\n  ? { ajout: 'Ajouté pour compléter ta semaine.', double: ' Préparé en double pour le déjeuner du lendemain.', reste: function (j) { return 'Restes du dîner de ' + j + '.'; } }\n  : { ajout: 'Added to complete your week.', double: \" Cooked in double for tomorrow's lunch.\", reste: function (j) { return 'Leftovers from ' + j + ' dinner.'; } };\n\nconst parId = {}; ctx.pool.forEach(function (r) { parId[String(r.id)] = r; });\nconst parCreneau = {}; proposes.forEach(function (m) { if (m && m.creneau) parCreneau[String(m.creneau).trim()] = m; });\nconst utilises = {};\nconst cuisines = {};\n\nfunction ligne(creneau, src, titre, pourquoi, cout, ingredients, temps) {\n  const parts = creneau.split('_');\n  return {\n    \"Identifiant\": ctx.reference + '_' + creneau, \"Creneau\": creneau, \"Jour\": parts[0] || '', \"Moment\": parts[1] || '',\n    \"Plat\": titre || src.titre, \"Spoonacular ID\": src.id, \"Lien recette\": src.lien || '', \"Pourquoi ce plat\": pourquoi || '',\n    \"Ingredients\": JSON.stringify(ingredients), \"Cout estime\": Math.round((Number(cout) || 0) * 100) / 100,\n    \"Calories\": src.calories || 0, \"Proteines\": src.proteines || 0, \"Temps\": temps || 0,\n    \"Statut\": \"propose\", \"Run\": ctx.run, \"Demande\": ctx.reference\n  };\n}\n\nctx.cuisson.forEach(function (creneau) {\n  const m = parCreneau[creneau] || {};\n  let src = parId[String(m.recette_id)];\n  let pourquoi = m.pourquoi, titre = FR ? m.titre : null;\n  if (!src || utilises[src.id]) {\n    src = ctx.pool.find(function (r) { return !utilises[r.id]; });\n    // Pool exhausted: better an empty slot the user can fill than the same dish twice.\n    if (!src) return;\n    pourquoi = TXT.ajout; titre = null;\n  }\n  utilises[src.id] = true;\n  const double = nourritReste(creneau, ctx.restes, ctx.creneauxDemande);\n  const f = double ? 2 : 1;\n  const ing = (src.ingredients || []).map(function (i) { return { nom: i.nom, quantite: Math.round(i.quantite * f * 100) / 100, unite: i.unite }; });\n  cuisines[creneau] = ligne(creneau, src, titre, double ? (pourquoi || '') + TXT.double : pourquoi, (Number(m.cout_estime) || 0) * f, ing, src.temps_min);\n});\n\nconst restesLignes = [];\nctx.aRemplir.filter(function (c) { return estReste(c, ctx.restes, ctx.creneauxDemande); }).forEach(function (c) {\n  const d = diner_veille(c);\n  const n = cuisines[d];\n  const src = n ? { id: n[\"Spoonacular ID\"], titre: n.Plat, lien: n[\"Lien recette\"], calories: n.Calories, proteines: n.Proteines } : ctx.dinersGardes[d];\n  if (!src) return;\n  restesLignes.push(ligne(c, src, null, TXT.reste(JOURS[d.split('_')[0]]), 0, [], 0));\n});\n\nconst tout = Object.keys(cuisines).map(function (k) { return cuisines[k]; }).concat(restesLignes);\nif (tout.length === 0) return echec('Aucun repas proposé');\nreturn tout.map(function (j) { return { json: j }; });\n"
+      },
+      "id": "6432df21-a6b4-481a-9165-208634369ab0",
+      "name": "Parse Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2e1d4956-d79b-4ffd-aff4-536fe998671a",
+              "leftValue": "={{ $json.echec }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "66a76de7-199e-4ea4-8dbd-05733d32c027",
+      "name": "Plan Parsed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1216,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Identifiant",
+              "displayName": "Identifiant",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Creneau",
+              "displayName": "Creneau",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Jour",
+              "displayName": "Jour",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Lun",
+                  "value": "Lun"
+                },
+                {
+                  "name": "Mar",
+                  "value": "Mar"
+                },
+                {
+                  "name": "Mer",
+                  "value": "Mer"
+                },
+                {
+                  "name": "Jeu",
+                  "value": "Jeu"
+                },
+                {
+                  "name": "Ven",
+                  "value": "Ven"
+                },
+                {
+                  "name": "Sam",
+                  "value": "Sam"
+                },
+                {
+                  "name": "Dim",
+                  "value": "Dim"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Moment",
+              "displayName": "Moment",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "midi",
+                  "value": "midi"
+                },
+                {
+                  "name": "soir",
+                  "value": "soir"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Plat",
+              "displayName": "Plat",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Spoonacular ID",
+              "displayName": "Spoonacular ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lien recette",
+              "displayName": "Lien recette",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Pourquoi ce plat",
+              "displayName": "Pourquoi ce plat",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Ingredients",
+              "displayName": "Ingredients",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Cout estime",
+              "displayName": "Cout estime",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Statut",
+              "displayName": "Statut",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "propose",
+                  "value": "propose"
+                },
+                {
+                  "name": "garde",
+                  "value": "garde"
+                },
+                {
+                  "name": "refuse",
+                  "value": "refuse"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Run",
+              "displayName": "Run",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Demande",
+              "displayName": "Demande",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "81cdf623-cd8e-4ffc-b8e5-b719f6e025b3",
+      "name": "Save Meals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        192
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Plan Swap').first().json.recordId }}",
+            "Statut": "plan_genere"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "5d6e9e79-d3ad-46ec-b84c-e46c255582f8",
+      "name": "Mark Ready",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1648,
+        192
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Plan Swap').first().json.recordId }}",
+            "Statut": "plan_genere"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "87878c87-afaa-4291-96aa-df7fd91386a4",
+      "name": "Keep Plan",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        416
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "notes": "Replacement failed: the request goes back to plan_genere so the site shows the remaining meals; the empty slot can be retried."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Swap Request": {
+      "main": [
+        [
+          {
+            "node": "Read Swap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Swap": {
+      "main": [
+        [
+          {
+            "node": "Find Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Meals": {
+      "main": [
+        [
+          {
+            "node": "Plan Swap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Swap": {
+      "main": [
+        [
+          {
+            "node": "Swap Possible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swap Possible?": {
+      "main": [
+        [
+          {
+            "node": "Mark Pending",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Refused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Pending": {
+      "main": [
+        [
+          {
+            "node": "Reply Ack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Ack": {
+      "main": [
+        [
+          {
+            "node": "List Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Rejected": {
+      "main": [
+        [
+          {
+            "node": "Any Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Mark Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Rejected": {
+      "main": [
+        [
+          {
+            "node": "Build Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search": {
+      "main": [
+        [
+          {
+            "node": "Search Recipes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Recipes": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Pool Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pool Found?": {
+      "main": [
+        [
+          {
+            "node": "Groq Swap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Swap": {
+      "main": [
+        [
+          {
+            "node": "Parse Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan Parsed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Parsed?": {
+      "main": [
+        [
+          {
+            "node": "Save Meals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Meals": {
+      "main": [
+        [
+          {
+            "node": "Mark Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "aeebab0d-e8f2-4fd7-acc7-ac255e0307dc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "7XWzQW6WQtWWzWN5",
+  "tags": []
+}

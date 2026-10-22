@@ -1,0 +1,313 @@
+{
+  "name": "Meal Prep — 4. Read shopping list",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "meal-prep-courses",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "16d837d8-6399-4b76-9e4a-a334b50ab309",
+      "name": "List Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        112
+      ],
+      "webhookId": "z0000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupère la référence passée en paramètre d'URL : ?ref=MP-20260914-XXXXX\nconst ref = ($input.first().json.query || {}).ref || '';\nreturn [{ json: { reference: ref } }];"
+      },
+      "id": "026c6675-a792-4255-889e-98e37c3d2fe3",
+      "name": "Read Reference",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Reference} = '\" + $json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "97d1c3d3-f837-4b82-a1bd-e7cae41438c4",
+      "name": "Find Request",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -432,
+        112
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.Statut }}",
+              "rightValue": "validee",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "6b73ae7a-bb94-43a4-808f-afeec6639b7f",
+      "name": "List Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEiPibEMZsIGq2",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Demande} = '\" + $('Read Reference').first().json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "0e4085dc-59ca-4ec6-b419-3e5dc685750f",
+      "name": "Fetch List",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble la liste de courses une fois toutes les lignes écrites.\n\nconst reference = $('Read Reference').first().json.reference;\nconst lignes = $input.all()\n  .map(function (i) { return i.json; })\n  .filter(function (r) { return r.Ingredient; });\n\nif (lignes.length === 0) {\n  return [{ json: { ok: true, statut: 'en_preparation', reference: reference, courses: [] } }];\n}\n\nconst courses = lignes.map(function (r) {\n  return {\n    ingredient: r.Ingredient,\n    quantite: r.Quantite || '',\n    rayon: r.Rayon || 'autre',\n    a_acheter: r['A acheter'] === true,\n    cout_estime: r['Cout estime'] || 0,\n    utilise_dans: r['Utilise dans'] || ''\n  };\n});\n\nconst total = courses\n  .filter(function (c) { return c.a_acheter; })\n  .reduce(function (s, c) { return s + (Number(c.cout_estime) || 0); }, 0);\n\nreturn [{\n  json: {\n    ok: true,\n    statut: 'prete',\n    reference: reference,\n    nb_articles: courses.filter(function (c) { return c.a_acheter; }).length,\n    cout_total: Math.round(total * 100) / 100,\n    courses: courses\n  }\n}];"
+      },
+      "id": "2f031d3c-37b9-4d16-a32a-faf2eb39fe84",
+      "name": "Build List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8a862afb-e0ff-4b81-9782-098dc3ce1d0e",
+      "name": "Reply List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trois cas distincts : référence inconnue, génération échouée, écriture en cours.\n// Sans le cas 'echec', le site attendrait indéfiniment une liste qui ne viendra pas.\n\nconst d = $input.first().json || {};\nconst reference = $('Read Reference').first().json.reference;\n\nif (!d.Reference) {\n  return [{ json: {\n    ok: false,\n    statut: 'introuvable',\n    reference: reference,\n    message: \"No request matches this reference\"\n  } }];\n}\n\nif (d.Statut === 'echec') {\n  return [{ json: {\n    ok: false,\n    statut: 'echec',\n    reference: reference,\n    message: d.Notes || \"We couldn't build your shopping list\"\n  } }];\n}\n\nreturn [{ json: {\n  ok: true,\n  statut: 'en_preparation',\n  reference: reference,\n  courses: []\n} }];"
+      },
+      "id": "d5ea1625-7abc-489a-9bd1-2425f8cff4b7",
+      "name": "Build Pending",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5dafb997-7afe-4652-aaed-024c6a1a6866",
+      "name": "Reply Pending",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        240
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "List Request": {
+      "main": [
+        [
+          {
+            "node": "Read Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Reference": {
+      "main": [
+        [
+          {
+            "node": "Find Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Request": {
+      "main": [
+        [
+          {
+            "node": "List Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Ready?": {
+      "main": [
+        [
+          {
+            "node": "Fetch List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch List": {
+      "main": [
+        [
+          {
+            "node": "Build List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build List": {
+      "main": [
+        [
+          {
+            "node": "Reply List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pending": {
+      "main": [
+        [
+          {
+            "node": "Reply Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "34a23c57-65c3-4821-bb01-e129532f07a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "sHqw2cSVTcAE3r80",
+  "tags": []
+}

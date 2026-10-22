@@ -1,0 +1,240 @@
+{
+  "name": "Meal Prep — 7. Sub: current week",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "39f0fb94-405b-4dd7-9163-eb91c1fa1242",
+      "name": "Sub Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        352,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblLz1WHWOjv9YbpW",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Chat ID} = '\" + $json.chatId + \"'\" }}",
+        "options": {}
+      },
+      "id": "2050c900-c2d1-4b65-97b2-d6326dafa595",
+      "name": "Find Link",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        576,
+        144
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turns the Liaisons lookup into { lie, email, session }.\n// Unlinked chats search with a sentinel: an empty email would match every request without one.\nconst chatId = $('Sub Start').first().json.chatId;\nconst l = $input.first().json || {};\nif (!l.Email) return [{ json: { lie: false, chatId: chatId, filtre: '__aucun__' } }];\nreturn [{ json: {\n  lie: true, chatId: chatId, email: l.Email, prenom: l.Prenom || '', filtre: l.Email, recordId: l.id,\n  session: { plat: l['Session plat'] || '', creneau: l['Session creneau'] || '', etapes: l['Session etapes'] || '', etape: Number(l['Session etape']) || 0 }\n} }];\n"
+      },
+      "id": "fa4d1b0f-5fb2-4ea7-98a7-fcdef8f93547",
+      "name": "Extract Account",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"AND({Email} = '\" + $json.filtre + \"', OR({Statut} = 'plan_genere', {Statut} = 'validee'))\" }}",
+        "options": {}
+      },
+      "id": "a6eda300-3509-4390-8eba-ad290539ae87",
+      "name": "Find Plans",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1024,
+        144
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Most recent ready plan for this account (\"Cree le\" first, reference as tie-break: MP-YYYYMMDD-...).\nconst demandes = $input.all().map(function (i) { return i.json; }).filter(function (d) { return d.Reference; });\ndemandes.sort(function (a, b) {\n  const ca = String(a['Cree le'] || ''), cb = String(b['Cree le'] || '');\n  if (ca !== cb) return cb.localeCompare(ca);\n  return String(b.Reference).localeCompare(String(a.Reference));\n});\nconst d = demandes[0];\nif (!d) return [{ json: { reference: '', filtre: '__aucune__' } }];\nreturn [{ json: { reference: d.Reference, filtre: d.Reference, personnes: d.Personnes || null, statut: d.Statut } }];\n"
+      },
+      "id": "4ed60f56-952e-436a-874d-e5f49a8f7abf",
+      "name": "Latest Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"AND({Demande} = '\" + $json.filtre + \"', {Statut} != 'refuse')\" }}",
+        "options": {}
+      },
+      "id": "a4adcc3b-2f5d-4a2e-8e4f-ff87a8c67806",
+      "name": "Fetch Meals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        144
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Always exactly one item back to the parent.\nconst compte = $('Extract Account').first().json;\nconst semaine = $('Latest Plan').first().json;\nif (!compte.lie) return [{ json: { lie: false, plan: false } }];\nconst base = { lie: true, email: compte.email, prenom: compte.prenom, recordId: compte.recordId, session: compte.session };\nif (!semaine.reference) return [{ json: Object.assign({ plan: false }, base) }];\n\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\n\nconst repas = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r.Creneau; }).map(function (r) {\n  let ingredients = [];\n  try { ingredients = JSON.parse(r.Ingredients || '[]'); } catch (e) { ingredients = []; }\n  return {\n    creneau: r.Creneau, plat: r.Plat, lien: r['Lien recette'] || '', spoon: Number(r['Spoonacular ID']) || null,\n    temps: Number(r.Temps) || null, calories: Number(r.Calories) || null, proteines: Number(r.Proteines) || null,\n    ingredients: ingredients\n  };\n}).sort(function (a, b) { return rang(a.creneau) - rang(b.creneau); });\n\nreturn [{ json: Object.assign({}, base, {\n  plan: repas.length > 0, reference: semaine.reference, personnes: semaine.personnes, statut: semaine.statut, repas: repas\n}) }];\n"
+      },
+      "id": "30da971f-84a4-4d68-959c-6d998867e5ee",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Sub Start": {
+      "main": [
+        [
+          {
+            "node": "Find Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Link": {
+      "main": [
+        [
+          {
+            "node": "Extract Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Account": {
+      "main": [
+        [
+          {
+            "node": "Find Plans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Plans": {
+      "main": [
+        [
+          {
+            "node": "Latest Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Latest Plan": {
+      "main": [
+        [
+          {
+            "node": "Fetch Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Meals": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "7f60cf7a-95dc-48bd-b3de-90a10bc78db7",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "ImCklONmv37yR3Or",
+  "tags": []
+}

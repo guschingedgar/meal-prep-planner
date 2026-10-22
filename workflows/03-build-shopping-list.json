@@ -1,0 +1,785 @@
+{
+  "name": "Meal Prep — 3. Shopping list (Groq)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meal-prep-valider",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "57f63da0-5156-4f71-9515-beb50b5d5cb0",
+      "name": "Validate Week",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        368
+      ],
+      "webhookId": "y0000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le site envoie { reference: \"MP-...\" } quand l'utilisateur valide ses repas.\nconst body = $input.first().json.body || {};\nconst ref = (body.reference || '').trim();\n\nif (!ref) {\n  return [{ json: { valide: false, reference: '' } }];\n}\nreturn [{ json: { valide: true, reference: ref } }];"
+      },
+      "id": "3d9d176e-1eec-4bed-b2b8-d45c1a246f42",
+      "name": "Read Reference",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1728,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Reference} = '\" + $json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "aedd8bb5-1e1e-4519-abd8-a55a8f0db023",
+      "name": "Find Request",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1504,
+        368
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "v1",
+              "leftValue": "={{ $json.Reference }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "61523551-1a40-49c3-82a1-dc87aade2a7f",
+      "name": "Request Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1264,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, message: \"Aucune demande ne correspond à cette référence\" }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "77727ae3-e4e7-4d3a-bd44-982b63524a1a",
+      "name": "Reply Unknown",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1056,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tble3PivF9dnNZvye",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"AND({Demande} = '\" + $('Read Reference').first().json.reference + \"', {Statut} != 'refuse')\" }}",
+        "options": {}
+      },
+      "id": "c8212e95-bcc4-4a9e-80b1-b6d98a823606",
+      "name": "Fetch Meals",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        112
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, message: \"Liste en cours de préparation\" }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "e61e6493-2838-4dde-aa5f-ae821b514bf9",
+      "name": "Reply Ack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -832,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the shopping list IN CODE, then asks Groq only for aisle, price, pantry match.\n// Merging: names are normalised (\"fresh parsley leaves\" -> \"parsley\", \"tomatoes\" -> \"tomato\"),\n// then every unit of the same ingredient is converted to ONE unit (g, ml or pieces)\n// using typical densities and piece weights, so each ingredient appears once.\n\nconst demande = $('Find Request').first().json;\nlet brut = {}; try { brut = JSON.parse(demande['Payload brut'] || '{}'); } catch (e) {}\nconst FR = brut.lang === 'fr';\nconst lignes = $input.all().map(function (i) { return i.json; });\n\n// ---------- 1. Name normalisation ----------\nconst SYNONYMES = {\n  'cilantro': 'coriander', 'scallion': 'spring onion', 'green onion': 'spring onion', 'garbanzo bean': 'chickpea',\n  'capsicum': 'bell pepper', 'aubergine': 'eggplant', 'courgette': 'zucchini', 'garlic clove': 'garlic',\n  'italian parsley': 'parsley', 'flat leaf parsley': 'parsley', 'kosher salt': 'salt', 'sea salt': 'salt', 'table salt': 'salt',\n  'extra virgin olive oil': 'olive oil', 'evoo': 'olive oil', 'plain flour': 'flour', 'all purpose flour': 'flour',\n  'caster sugar': 'sugar', 'granulated sugar': 'sugar', 'white sugar': 'sugar', 'unsalted butter': 'butter', 'salted butter': 'butter',\n  'boneless skinless chicken breast': 'chicken breast', 'skinless chicken breast': 'chicken breast', 'boneless chicken breast': 'chicken breast',\n  'chicken stock': 'chicken broth', 'vegetable stock': 'vegetable broth', 'beef stock': 'beef broth', 'black peppercorn': 'black pepper',\n  'ground black pepper': 'black pepper', 'pepper': 'black pepper'\n};\nconst MOTS_INUTILES = ['fresh', 'freshly', 'chopped', 'minced', 'sliced', 'diced', 'finely', 'roughly', 'coarsely', 'grated', 'shredded',\n  'leaves', 'leaf', 'sprigs', 'sprig', 'large', 'medium', 'small', 'whole', 'raw', 'organic', 'ripe', 'peeled', 'crushed', 'cloves', 'clove',\n  'handful', 'bunch', 'of', 'to', 'taste', 'optional', 'flat-leaf', 'packed', 'thinly', 'halved', 'cubed', 'trimmed'];\nconst PAS_DE_PLURIEL = ['asparagus', 'hummus', 'couscous', 'molasses', 'swiss', 'grass', 'lemongrass', 'bass', 'citrus', 'hibiscus', 'watercress', 'cress'];\n\nfunction singulier(mot) {\n  if (PAS_DE_PLURIEL.indexOf(mot) !== -1 || mot.length <= 3) return mot;\n  if (/ies$/.test(mot)) return mot.slice(0, -3) + 'y';\n  if (/(tomato|potato|mango)es$/.test(mot)) return mot.slice(0, -2);\n  if (/(ch|sh)es$/.test(mot)) return mot.slice(0, -2);\n  if (/[^s]s$/.test(mot)) return mot.slice(0, -1);\n  return mot;\n}\nfunction normaliserNom(brut) {\n  let n = String(brut || '').toLowerCase().replace(/\\(.*?\\)/g, ' ').replace(/[^a-zà-ÿ\\s-]/g, ' ').replace(/-/g, ' ').replace(/\\s+/g, ' ').trim();\n  if (SYNONYMES[n]) return SYNONYMES[n];\n  let mots = n.split(' ').filter(function (m) { return MOTS_INUTILES.indexOf(m) === -1; });\n  if (!mots.length) mots = n.split(' ');\n  mots[mots.length - 1] = singulier(mots[mots.length - 1]);\n  n = mots.join(' ');\n  if (/^ground /.test(n) && !/(beef|pork|turkey|chicken|lamb|meat)/.test(n)) n = n.replace(/^ground /, '');\n  return SYNONYMES[n] || n;\n}\n\n// ---------- 2. Units ----------\nconst VERS_ML = { tsp: 5, tsps: 5, teaspoon: 5, teaspoons: 5, t: 5, tbsp: 15, tbsps: 15, tablespoon: 15, tablespoons: 15, tbs: 15, T: 15,\n  cup: 240, cups: 240, ml: 1, milliliter: 1, milliliters: 1, cl: 10, dl: 100, l: 1000, liter: 1000, liters: 1000, 'fl oz': 30, dash: 0.6, pinch: 0.3, pinches: 0.3 };\nconst VERS_G = { g: 1, gram: 1, grams: 1, kg: 1000, oz: 28.35, ounce: 28.35, ounces: 28.35, lb: 454, lbs: 454, pound: 454, pounds: 454 };\nconst PIECES = ['', 'piece', 'pieces', 'serving', 'servings', 'large', 'medium', 'small', 'whole', 'clove', 'cloves', 'head', 'heads', 'can', 'cans',\n  'slice', 'slices', 'stalk', 'stalks', 'fillet', 'fillets', 'bunch', 'bunches', 'handful', 'handfuls', 'sprig', 'sprigs', 'leaf', 'leaves'];\n\n// Grams per ml for common ingredients (default 1).\nconst DENSITES = [\n  [/parsley|coriander|basil|mint|dill|chive|tarragon|thyme|rosemary|oregano|sage|herb|spinach|rocket|arugula|lettuce/, 0.12],\n  [/cumin|paprika|cinnamon|turmeric|curry powder|chili powder|chilli powder|garam masala|nutmeg|ginger powder|powder|spice|seasoning|black pepper/, 0.5],\n  [/flour|cocoa|breadcrumb|panko/, 0.55], [/oat/, 0.4], [/sugar/, 0.85], [/salt/, 1.2], [/honey|syrup|molasses/, 1.4],\n  [/rice|lentil|quinoa|couscous/, 0.8], [/cheese|parmesan|cheddar|feta|mozzarella/, 0.45], [/butter/, 0.95], [/nut|almond|walnut|cashew|seed/, 0.6]\n];\nfunction densite(nom) { for (let i = 0; i < DENSITES.length; i++) if (DENSITES[i][0].test(nom)) return DENSITES[i][1]; return 1; }\nconst LIQUIDE = /milk|water|broth|stock|cream|juice|vinegar|oil|wine|sauce|syrup|beer|coconut milk/;\n\n// Typical weight of one piece, in grams (for items people buy by the piece).\nconst POIDS_PIECE = [\n  [/^garlic$/, 5], [/spring onion/, 15], [/red onion|onion/, 150], [/shallot/, 40], [/egg$/, 55], [/lemon/, 100], [/lime/, 65], [/orange/, 130],\n  [/cherry tomato/, 15], [/tomato/, 120], [/sweet potato/, 250], [/potato/, 170], [/carrot/, 70], [/bell pepper/, 150], [/zucchini/, 200],\n  [/cucumber/, 300], [/avocado/, 170], [/banana/, 120], [/apple/, 180], [/chili|chilli|jalapeno/, 15], [/eggplant/, 300],\n  [/chicken breast/, 170], [/chicken thigh/, 110], [/mushroom/, 18], [/celery/, 40], [/leek/, 200], [/cabbage/, 900], [/broccoli/, 350],\n  [/cauliflower/, 600], [/tortilla/, 45], [/pita|naan|bun|bagel/, 70], [/salmon fillet|fish fillet|cod fillet/, 140], [/can$|canned/, 400]\n];\nfunction poidsPiece(nom) { for (let i = 0; i < POIDS_PIECE.length; i++) if (POIDS_PIECE[i][0].test(nom)) return POIDS_PIECE[i][1]; return 0; }\n\n// ---------- 3. Merge ----------\nconst fusion = {};\nlignes.forEach(function (r) {\n  let ing = [];\n  try { ing = JSON.parse(r.Ingredients || '[]'); } catch (e) { ing = []; }\n  const plat = String(r.Plat || '').split(/\\s+/).slice(0, 3).join(' ');\n  ing.forEach(function (i) {\n    const nom = normaliserNom(i.nom);\n    if (!nom) return;\n    const q = Number(i.quantite) || 0;\n    const u = String(i.unite || '').trim();\n    const ul = u.toLowerCase();\n    if (!fusion[nom]) fusion[nom] = { g: 0, ml: 0, pieces: 0, autres: {}, plats: [] };\n    const f = fusion[nom];\n    if (VERS_G[ul] !== undefined) f.g += q * VERS_G[ul];\n    else if (VERS_ML[u] !== undefined || VERS_ML[ul] !== undefined) f.ml += q * (VERS_ML[u] !== undefined ? VERS_ML[u] : VERS_ML[ul]);\n    else if (PIECES.indexOf(ul) !== -1) {\n      if (/^cans?$/.test(ul)) f.g += q * 400;\n      else if (/^bunch/.test(ul)) f.g += q * 30;\n      else if (/^handful/.test(ul)) f.g += q * 30;\n      else if (/^(sprig|leaf|leaves)/.test(ul)) f.g += q * 1;\n      else f.pieces += q;\n    } else { f.autres[ul] = (f.autres[ul] || 0) + q; }\n    if (f.plats.indexOf(plat) === -1) f.plats.push(plat);\n  });\n});\n\nfunction arrondirMasse(v, u) {\n  let x = v < 50 ? Math.ceil(v / 5) * 5 : Math.ceil(v / 10) * 10;\n  x = Math.max(x, 5);\n  if (x >= 1000) return (Math.round(x / 100) / 10) + (u === 'g' ? ' kg' : ' L');\n  return x + ' ' + u;\n}\n\nconst articles = Object.keys(fusion).map(function (nom) {\n  const f = fusion[nom];\n  const liquide = LIQUIDE.test(nom);\n  const d = densite(nom);\n  const pp = poidsPiece(nom);\n  // Everything that can become one unit does.\n  let masse = f.g + (liquide ? 0 : f.ml * d);\n  let volume = liquide ? f.ml + f.g / d : 0;\n  let pieces = f.pieces;\n  const parts = [];\n  if (pp && (pieces || masse)) {\n    // Bought by the piece: express the whole amount as a piece count.\n    const total = pieces * pp + masse;\n    parts.push(Math.max(1, Math.ceil(total / pp)) + (nom === 'garlic' ? ' cloves' : ' pieces'));\n    masse = 0; pieces = 0;\n  }\n  if (pieces && masse) { masse += 0; parts.push(Math.ceil(pieces) + ' pieces'); pieces = 0; }\n  if (masse) parts.push(arrondirMasse(masse, 'g'));\n  if (volume) parts.push(arrondirMasse(volume, 'ml'));\n  if (pieces) parts.push(Math.ceil(pieces) + ' pieces');\n  Object.keys(f.autres).forEach(function (u) { parts.push(Math.ceil(f.autres[u]) + ' ' + u); });\n  return { ingredient: nom, quantite: parts.join(' + ') || 'to taste', utilise_dans: f.plats.join(', ') };\n});\n\nif (articles.length === 0) {\n  return [{ json: { echec: true, raison: 'Aucun ingrédient trouvé dans les repas', recordId: demande.id } }];\n}\n\n// ---------- 4. Small prompt: aisle, price, pantry ----------\nconst liste = articles.map(function (a, i) { return i + '. ' + a.ingredient + ' (' + a.quantite + ')'; }).join('\\n');\nconst prompt = [\n  \"For each numbered grocery item below, give its supermarket aisle, an estimated price in euros (average French supermarket, for the quantity shown), and whether it is already in the pantry.\",\n  \"Pantry: \" + (demande.Stock || 'nothing'),\n  \"Aisles allowed: fruits_legumes, viande_poisson, cremerie, epicerie, surgele, autre.\",\n  FR ? \"Also give \\\"nom\\\": the item's usual French name as written on a shopping list (e.g. persil, oignon rouge).\" : null,\n  \"\",\n  liste,\n  \"\",\n  \"Answer ONLY with a JSON object in this exact format, one entry per item number:\",\n  FR ? '{\"items\":[{\"i\":0,\"nom\":\"riz\",\"rayon\":\"epicerie\",\"prix\":1.2,\"en_stock\":false}]}' : '{\"items\":[{\"i\":0,\"rayon\":\"epicerie\",\"prix\":1.2,\"en_stock\":false}]}'\n].filter(function (l) { return l !== null; }).join('\\n');\n\nreturn [{ json: {\n  reference: demande.Reference, recordId: demande.id, stock: demande.Stock || '', articles: articles, lang: FR ? 'fr' : 'en',\n  corpsLLM: {\n    model: 'openai/gpt-oss-120b', max_tokens: 8000, reasoning_effort: 'low', temperature: 0.2,\n    response_format: { type: 'json_object' },\n    messages: [\n      { role: 'system', content: 'You are a grocery assistant. You always answer with a single valid JSON object and nothing else.' },\n      { role: 'user', content: prompt }\n    ]\n  }\n} }];\n"
+      },
+      "id": "febb500e-36f1-4b03-8848-6e75d015fe61",
+      "name": "Merge Ingredients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.corpsLLM) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "da6b669a-2aaf-4bd1-a416-686ff35c9228",
+      "name": "Groq Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -384,
+        256
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VTwcPABWORgXqCGf",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merges Groq's aisle/price/pantry answers with the list built in code.\n// If Groq skips an item, sensible defaults apply instead of failing.\n\nconst ctx = $('Merge Ingredients').first().json;\nconst rep = $input.first().json;\n\nfunction echec(raison) {\n  return [{ json: { echec: true, raison: raison, recordId: ctx.recordId } }];\n}\n\nlet infos = {};\nconst choix = (rep.choices || [])[0];\n\nif (rep.error) {\n  return echec('Groq : ' + (rep.error.message || JSON.stringify(rep.error)).slice(0, 200));\n}\nif (choix && choix.message) {\n  try {\n    const texte = String(choix.message.content || '').replace(/```json|```/g, '').trim();\n    const sortie = JSON.parse(texte);\n    (sortie.items || []).forEach(function (x) { if (x && x.i !== undefined) infos[Number(x.i)] = x; });\n  } catch (e) {\n    infos = {}; // fall back to defaults below\n  }\n}\n\nconst RAYONS = ['fruits_legumes', 'viande_poisson', 'cremerie', 'epicerie', 'surgele', 'autre'];\nconst stock = String(ctx.stock || '').toLowerCase().split(',').map(function (s) { return s.trim(); }).filter(Boolean);\n\nreturn ctx.articles.map(function (a, idx) {\n  const x = infos[idx] || {};\n  const dansStock = x.en_stock === true || stock.some(function (s) { return a.ingredient.indexOf(s) !== -1 || s.indexOf(a.ingredient) !== -1; });\n  return {\n    json: {\n      \"Ingredient\": (ctx.lang === 'fr' && x.nom) ? String(x.nom) : a.ingredient,\n      \"Quantite\": a.quantite,\n      \"Rayon\": RAYONS.indexOf(x.rayon) !== -1 ? x.rayon : 'autre',\n      \"Deja en stock\": dansStock,\n      \"A acheter\": !dansStock,\n      \"Cout estime\": dansStock ? 0 : (Number(x.prix) || 0),\n      \"Utilise dans\": a.utilise_dans,\n      \"Demande\": ctx.reference\n    }\n  };\n});\n"
+      },
+      "id": "3604a82a-52e0-48f7-b88b-b93116353a70",
+      "name": "Parse List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEiPibEMZsIGq2",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "3b1e682b-057b-4bc1-b3a1-f6245e439041",
+      "name": "Save List",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        256
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Merge Ingredients').first().json.recordId }}",
+            "Statut": "validee"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "fc332cf4-a210-4f21-b8df-6ffac9d68f1d",
+      "name": "Mark Validated",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        496,
+        256
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "p1",
+              "leftValue": "={{ $json.echec }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1e08bd89-268b-44b6-985b-7b00bc3308da",
+      "name": "List Parsed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        48,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Statut": "echec",
+            "Notes": "={{ 'Liste de courses : ' + $json.raison }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "d5bd7660-1481-4ffd-8888-6bb255017930",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        448
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Statut": "plan_genere"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "5d9409ba-0526-4bea-9ecd-8917572d2339",
+      "name": "Mark Building",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1056,
+        272
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEiPibEMZsIGq2",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Demande} = '\" + $('Read Reference').first().json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "66950c14-e81c-4560-959b-e9d77979eea5",
+      "name": "Find Old List",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -608,
+        112
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Returns one item per existing shopping-list row (to delete before rebuilding),\n// or a single marker item when there is none, so the flow never stops here.\nconst lignes = $input.all().map(function (i) { return i.json; }).filter(function (r) { return r.id && r.Ingredient; });\nif (lignes.length === 0) return [{ json: { aucune: true } }];\nreturn lignes.map(function (r) { return { json: { id: r.id } }; });\n"
+      },
+      "id": "aca8bbe4-212c-4914-b1ef-6d0dad35734c",
+      "name": "Old Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ee8cc065-70ae-45f1-926e-9eab3834eb51",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "4a5d6dd6-a567-45de-9326-f5ec5dd711a5",
+      "name": "Old List?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "deleteRecord",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEiPibEMZsIGq2",
+          "mode": "id"
+        },
+        "id": "={{ $json.id }}"
+      },
+      "id": "0e569924-e270-4a44-854f-0f68c61e6888",
+      "name": "Delete Old List",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Validate Week": {
+      "main": [
+        [
+          {
+            "node": "Read Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Reference": {
+      "main": [
+        [
+          {
+            "node": "Find Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Request": {
+      "main": [
+        [
+          {
+            "node": "Request Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Found?": {
+      "main": [
+        [
+          {
+            "node": "Mark Building",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Unknown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Building": {
+      "main": [
+        [
+          {
+            "node": "Reply Ack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Ack": {
+      "main": [
+        [
+          {
+            "node": "Find Old List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Old List": {
+      "main": [
+        [
+          {
+            "node": "Old Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Old Rows": {
+      "main": [
+        [
+          {
+            "node": "Old List?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Old List?": {
+      "main": [
+        [
+          {
+            "node": "Delete Old List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old List": {
+      "main": [
+        [
+          {
+            "node": "Fetch Meals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Meals": {
+      "main": [
+        [
+          {
+            "node": "Merge Ingredients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Ingredients": {
+      "main": [
+        [
+          {
+            "node": "Groq Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Prices": {
+      "main": [
+        [
+          {
+            "node": "Parse List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse List": {
+      "main": [
+        [
+          {
+            "node": "List Parsed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Parsed?": {
+      "main": [
+        [
+          {
+            "node": "Save List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save List": {
+      "main": [
+        [
+          {
+            "node": "Mark Validated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "fa39a4a1-a81d-4eb5-9951-5126ebee7e23",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "7fW8mcqrkXwBusTj",
+  "tags": []
+}

@@ -1,0 +1,2217 @@
+{
+  "name": "Meal Prep — 6. Chef (Telegram)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "59a22fb5-9d22-41d0-8450-69773631e613",
+      "name": "Receive Message",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -704,
+        368
+      ],
+      "webhookId": "1effdb70-5fda-484e-b8ac-ea284d75e8ad",
+      "credentials": {
+        "telegramApi": {
+          "id": "ozgpTbnvniKveIIF",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Who is talking, what they want, and which meal slot they mean (Paris time).\nconst msg = $input.first().json.message || {};\nconst chatId = String((msg.chat || {}).id || '');\nconst prenom = (msg.from || {}).first_name || '';\nconst texte = String(msg.text || '').trim();\nconst bas = texte.toLowerCase().replace(/@\\w+/, '');\n\nconst ORDRE = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst EN = { Mon: 'Lun', Tue: 'Mar', Wed: 'Mer', Thu: 'Jeu', Fri: 'Ven', Sat: 'Sam', Sun: 'Dim' };\nconst parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', weekday: 'short', hour: '2-digit', hour12: false }).formatToParts(new Date());\nlet jour = EN[parts.find(function (p) { return p.type === 'weekday'; }).value];\nconst heure = Number(parts.find(function (p) { return p.type === 'hour'; }).value);\nlet moment = heure < 15 ? 'midi' : 'soir';\nconst MOTS_JOURS = [[/\\b(lundi|monday|mon)\\b/, 'Lun'], [/\\b(mardi|tuesday|tue)\\b/, 'Mar'], [/\\b(mercredi|wednesday|wed)\\b/, 'Mer'],\n  [/\\b(jeudi|thursday|thu)\\b/, 'Jeu'], [/\\b(vendredi|friday|fri)\\b/, 'Ven'], [/\\b(samedi|saturday|sat)\\b/, 'Sam'], [/\\b(dimanche|sunday|sun)\\b/, 'Dim']];\nif (/\\b(demain|tomorrow)\\b/.test(bas)) jour = ORDRE[(ORDRE.indexOf(jour) + 1) % 7];\nMOTS_JOURS.forEach(function (m) { if (m[0].test(bas)) jour = m[1]; });\nif (/\\b(midi|lunch|d[ée]j(euner)?)\\b/.test(bas)) moment = 'midi';\nif (/\\b(soir|dinner|d[iî]ner|tonight)\\b/.test(bas)) moment = 'soir';\n\n// Intent. Short exact words first (they drive a cooking session), then commands, then free text.\nlet intention = 'question', reference = '', minutes = 0;\nconst lienSite = texte.match(/^\\/start\\s+(mp-\\S+)/i);\nif (lienSite) { intention = 'lier'; reference = lienSite[1].toUpperCase(); }\nelse if (/^\\/?(next|n|suivant|suivante|ok|done|fait|go|continue)\\s*[.!]*$/.test(bas)) intention = 'suivant';\nelse if (/^\\/?(back|b|prev|previous|retour|pr[ée]c[ée]dent)\\s*[.!]*$/.test(bas)) intention = 'precedent';\nelse if (/^\\/?(repeat|r|again|r[ée]p[eè]te)\\s*[.!?]*$/.test(bas)) intention = 'repeter';\nelse if (/^\\/(stop|end|fin)\\b/.test(bas)) intention = 'stop';\nelse if (/^\\/(start|help|aide|menu)\\b/.test(bas) || /^(help|aide|menu)$/.test(bas)) intention = 'aide';\nelse if (/^\\/link\\b/.test(bas)) { intention = 'lier'; reference = String(texte.split(/\\s+/)[1] || '').toUpperCase(); }\nelse if (/^\\/(timer|minuteur)\\b/.test(bas) || /^(timer|minuteur)\\b/.test(bas)) {\n  intention = 'minuteur'; const n = bas.match(/(\\d+)/); minutes = n ? Number(n[1]) : 0;\n}\nelse if (/^\\/(cook|cuisiner)\\b/.test(bas) || /^(let'?s cook|start cooking|on cuisine|cook)\\b/.test(bas)) intention = 'cuisiner';\nelse if (/^\\/(recipe|recette|steps)\\b/.test(bas) || /^(recipe|recette)\\b/.test(bas)) intention = 'recette';\nelse if (/^\\/(ingredients|ingr[ée]dients)\\b/.test(bas) || /^ingr[ée]dients?\\b/.test(bas)) intention = 'ingredients';\nelse if (/^\\/(week|semaine)\\b/.test(bas) || /\\b(my week|this week|ma semaine|cette semaine)\\b/.test(bas)) intention = 'semaine';\nelse if (/^\\/(list|courses|shopping)\\b/.test(bas) || /\\b(shopping list|liste de courses|courses)\\b/.test(bas)) intention = 'courses';\nelse if (/^\\/swap\\b/.test(bas) || /^(swap|replace|remplace[rz]?)\\b/.test(bas)) intention = 'remplacer';\nelse if (/^\\/(today|tonight)\\b/.test(bas) || /\\b(what'?s for|on mange quoi|qu'?est-ce qu'?on mange|today|tonight|ce soir|ce midi|aujourd'?hui)\\b/.test(bas)) intention = 'aujourdhui';\n\nreturn [{ json: { chatId: chatId, prenom: prenom, texte: texte, intention: intention, reference: reference, minutes: minutes,\n  jour: jour, moment: moment, creneau: jour + '_' + moment } }];\n"
+      },
+      "id": "ac918013-64ba-40a0-b00a-b7967fed98a4",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b042611c-16d1-486a-a7d5-5b06e91eec66",
+                    "leftValue": "={{ $json.intention }}",
+                    "rightValue": "aide",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "aide"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d7d1d61e-a5e4-47d4-ae2c-57e8cfb12666",
+                    "leftValue": "={{ $json.intention }}",
+                    "rightValue": "lier",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "lier"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "79e15043-1495-46b2-96d0-52ab943539f7",
+                    "leftValue": "={{ $json.intention }}",
+                    "rightValue": "minuteur",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "minuteur"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "contexte"
+        }
+      },
+      "id": "1034b57a-278e-4732-b815-62a409f2148b",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -256,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction menu(prenom) {\n  return [\n    '👨‍🍳 Welcome to Meal Prep Chef' + (prenom ? ', ' + prenom : '') + '!',\n    '',\n    'I\\'m your kitchen sidekick for the week you planned on Meal Prep. I show you what\\'s cooking, walk you through every recipe step by step, keep your shopping list in your pocket, and answer any cooking question along the way.',\n    '',\n    '📅 Your week',\n    '/today — what\\'s cooking now (add lunch, dinner, tomorrow or a day)',\n    '/week — your whole week at a glance',\n    '/list — your shopping list, by aisle',\n    '',\n    '📖 Recipes',\n    '/recipe — the full recipe with every step',\n    '/ingredients — just the ingredients',\n    '/swap — replace a meal you don\\'t fancy',\n    '',\n    '🍳 Cook with me',\n    '/cook — a guided session, one step at a time',\n    'next · back · repeat — move through the steps',\n    '/timer 10 — I\\'ll ping you when 10 minutes are up',\n    '/stop — end the session',\n    '',\n    '💬 Or just talk to me: \"can I use chickpeas instead of lentils?\", \"how do I know the chicken is done?\", \"what can I prep tonight for tomorrow?\"',\n    '',\n    'Every command understands a slot: /cook friday dinner, /recipe tomorrow lunch.'\n  ].join('\\n');\n}\n\nconst p = $('Parse Intent').first().json.prenom;\nreturn [{ json: { texte: menu(p) + '\\n\\nNot connected yet? On the site, log in, open a plan and tap \"Cook with Telegram\".' } }];\n"
+      },
+      "id": "75661d27-5a3a-4951-8b62-b850adac2b3d",
+      "name": "Build Menu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwKI8skxaUfTRjI",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Reference} = '\" + ($json.reference || '__aucune__') + \"'\" }}",
+        "options": {}
+      },
+      "id": "52c2867d-24b5-458b-b1af-84c0ccb8f214",
+      "name": "Find Plan",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1984,
+        240
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Parse Intent').first().json;\nconst d = $input.first().json || {};\nif (!m.reference) return [{ json: { ok: false, texte: 'Send /link followed by a plan reference, or tap \"Cook with Telegram\" on the site.' } }];\nif (!d.Reference) return [{ json: { ok: false, texte: 'I can\\'t find a plan with the reference ' + m.reference + '.' } }];\nif (!d.Email) return [{ json: { ok: false, texte: 'That plan isn\\'t tied to an account. Log in on the site, make a plan, then tap \"Cook with Telegram\" on it.' } }];\nreturn [{ json: { ok: true, chatId: m.chatId, email: d.Email, reference: d.Reference, prenom: m.prenom } }];\n"
+      },
+      "id": "3724d547-867b-4f12-b184-87c99e0b5277",
+      "name": "Check Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "26417b65-5996-424f-951c-a21ff9df9a7e",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0e6d4157-992c-487b-a887-fcfd9dc07669",
+      "name": "Plan Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2432,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblLz1WHWOjv9YbpW",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Chat ID": "={{ $json.chatId }}",
+            "Email": "={{ $json.email }}",
+            "Reference liee": "={{ $json.reference }}",
+            "Prenom": "={{ $json.prenom }}",
+            "Lie le": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "Chat ID"
+          ],
+          "schema": [
+            {
+              "id": "Chat ID",
+              "displayName": "Chat ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reference liee",
+              "displayName": "Reference liee",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Prenom",
+              "displayName": "Prenom",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lie le",
+              "displayName": "Lie le",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "ca8a55ed-6fd8-448e-90ca-e7fa87d7ed7b",
+      "name": "Save Link",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        2720,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction menu(prenom) {\n  return [\n    '👨‍🍳 Welcome to Meal Prep Chef' + (prenom ? ', ' + prenom : '') + '!',\n    '',\n    'I\\'m your kitchen sidekick for the week you planned on Meal Prep. I show you what\\'s cooking, walk you through every recipe step by step, keep your shopping list in your pocket, and answer any cooking question along the way.',\n    '',\n    '📅 Your week',\n    '/today — what\\'s cooking now (add lunch, dinner, tomorrow or a day)',\n    '/week — your whole week at a glance',\n    '/list — your shopping list, by aisle',\n    '',\n    '📖 Recipes',\n    '/recipe — the full recipe with every step',\n    '/ingredients — just the ingredients',\n    '/swap — replace a meal you don\\'t fancy',\n    '',\n    '🍳 Cook with me',\n    '/cook — a guided session, one step at a time',\n    'next · back · repeat — move through the steps',\n    '/timer 10 — I\\'ll ping you when 10 minutes are up',\n    '/stop — end the session',\n    '',\n    '💬 Or just talk to me: \"can I use chickpeas instead of lentils?\", \"how do I know the chicken is done?\", \"what can I prep tonight for tomorrow?\"',\n    '',\n    'Every command understands a slot: /cook friday dinner, /recipe tomorrow lunch.'\n  ].join('\\n');\n}\n\nconst l = $('Check Link').first().json;\nreturn [{ json: { texte: menu(l.prenom) + '\\n\\n✅ Linked to ' + l.email + '. Try /today to start.' } }];\n"
+      },
+      "id": "757be35a-c099-4706-8ef9-9b28a1f9295f",
+      "name": "Welcome Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Parse Intent').first().json;\nconst n = Math.round(Number(m.minutes) || 0);\nif (n < 1 || n > 180) return [{ json: { ok: false, texte: 'How long? Send /timer followed by minutes, e.g. /timer 12 (max 180).' } }];\nreturn [{ json: { ok: true, minutes: n, texte: '⏱ Timer set: ' + n + ' min. I\\'ll ping you when it\\'s up.' } }];\n"
+      },
+      "id": "03025168-9872-4bde-86ac-9fc4aa1f8ab7",
+      "name": "Set Timer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eb88ade5-40f8-41a7-8bcf-b2e024475c13",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "863b5ec3-e0e5-42bb-a001-817766bab531",
+      "name": "Duration Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2432,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.minutes }}",
+        "unit": "minutes"
+      },
+      "id": "57b67f86-d65b-4d72-842b-01db0418b75e",
+      "name": "Timer Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2720,
+        480
+      ],
+      "webhookId": "df3042c9-87d9-47f8-9903-d37fb8e413f4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const n = $('Set Timer').first().json.minutes;\nreturn [{ json: { texte: '⏰ Ding! Your ' + n + '-minute timer is up. Send next when you\\'re ready for the following step.' } }];\n"
+      },
+      "id": "1a7ecda8-90a3-48e7-9bca-002b586eca33",
+      "name": "Timer Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ImCklONmv37yR3Or",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ImCklONmv37yR3Or",
+          "cachedResultName": "Meal Prep — 7. Sub: semaine en cours"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b3a61b53-65db-4935-87e3-8becff570b8d",
+      "name": "Load Week",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -32,
+        2416
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "25c3db75-1d06-4a87-bfa4-294a606dfa98",
+              "leftValue": "={{ $json.lie }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "be7ee455-8056-4ece-8842-ef35861536f2",
+      "name": "Account Linked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        192,
+        2416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { texte: 'This chat isn\\'t connected to an account yet. On the site, log in, open a plan and tap \"Cook with Telegram\". Send /help to see everything I can do.' } }];\n"
+      },
+      "id": "1f8c5759-c520-4a64-8aa4-d81146b7e7e5",
+      "name": "Not Linked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        3344
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "204982e2-88f1-4e50-a333-3724db7edd7b",
+              "leftValue": "={{ $json.plan }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e132bc1a-5229-425e-b060-be9d84e54622",
+      "name": "Plan Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        416,
+        2320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { texte: 'No ready plan on your account yet. Make one here, then come back: https://meal-prep-intake-1.vercel.app' } }];\n"
+      },
+      "id": "d168791e-8818-4b43-ab38-0af008777829",
+      "name": "No Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        3152
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1b115c00-3d48-46e4-bfe2-a7c91ece7adc",
+              "name": "intention_ctx",
+              "value": "={{ $('Parse Intent').first().json.intention }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "46f38aaf-3f48-4bda-a396-8fb2842d43b3",
+      "name": "Attach Intent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9af99c7f-95e0-494b-a470-f97c77eb14ed",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "aujourdhui",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "aujourdhui"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c735816a-f2e0-444f-bf46-0f687b026ef1",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "semaine",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "semaine"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "19fe4af1-84cd-4663-ae1e-e6f7d7fe3932",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "recette",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "96aff258-a7ac-43e2-bb50-1c3f4c330285",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "cuisiner",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "recette"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f13a788f-907e-49ac-af8d-b453c00cba70",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "suivant",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "d752671a-6b99-4617-94c4-6c0835223a7f",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "precedent",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "fea80529-e858-4eec-a1f1-002a04be39d2",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "repeter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "658d0296-2f81-4e70-800c-0d7a04991af2",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "stop",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "session"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "97e80555-538d-4917-a805-1d0385309131",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "ingredients",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "ingredients"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "443c5585-f38b-4408-82cf-d2b3b0e1d63c",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "courses",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "courses"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "70fef35a-e961-45cf-82f8-84d3cb342111",
+                    "leftValue": "={{ $json.intention_ctx }}",
+                    "rightValue": "remplacer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "remplacer"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "question"
+        }
+      },
+      "id": "ead2331f-4d85-4c18-b714-b707934bd5f1",
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        864,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json;\nconst r = repasPour(c.repas, m.creneau);\nconst tete = r.exact ? libelle(r.repas.creneau) + ':' : 'Nothing planned for ' + libelle(m.creneau) + '. Next up, ' + libelle(r.repas.creneau) + ':';\nreturn [{ json: { texte: tete + '\\n\\n' + fiche(r.repas, c.personnes) + '\\n\\n➡️ /recipe for every step · /cook to cook it with me' } }];\n"
+      },
+      "id": "4719fc2d-6edc-48fd-909e-0464d64758fa",
+      "name": "Current Meal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '\\u2022 ' + i.nom + (q ? ' \\u2014 ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' \\u00b7 ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('\\ud83e\\uddfa Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('\\ud83d\\udd17 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '\\ud83c\\udf73 ' + plat + ' \\u2014 step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n\\u23f1 About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '\\u27a1\\ufe0f next \\u00b7 back \\u00b7 repeat \\u00b7 /stop' : '\\u27a1\\ufe0f next to finish \\u00b7 back \\u00b7 repeat');\n  t += '\\n\\ud83d\\udcac Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n\\u2026 (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json;\nconst lignes = c.repas.map(function (r) { return '\\u2022 ' + libelle(r.creneau) + ' \\u2014 ' + r.plat + (r.temps ? ' (' + r.temps + ' min)' : ''); });\nreturn [{ json: { texte: '\\ud83d\\udcc5 Your week (' + c.repas.length + ' meals' + (c.personnes ? ', for ' + c.personnes : '') + '):\\n\\n' + lignes.join('\\n') +\n  '\\n\\n\\u27a1\\ufe0f /recipe friday dinner \\u00b7 /cook tomorrow lunch \\u00b7 /list' } }];\n"
+      },
+      "id": "3c5343a5-aee3-4971-bafe-5a5a80f591e3",
+      "name": "Week Overview",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json;\nconst r = repasPour(c.repas, m.creneau);\nconst note = r.exact ? '' : 'Nothing planned for ' + libelle(m.creneau) + ', so here\\'s ' + libelle(r.repas.creneau) + '.\\n\\n';\nif (!r.repas.spoon) return [{ json: { ok: false, texte: note + 'I don\\'t have the step-by-step for ' + r.repas.plat + '. Full recipe: ' + (r.repas.lien || 'not available') } }];\nreturn [{ json: { ok: true, note: note, repas: r.repas, personnes: c.personnes, recordId: c.recordId, spoon: r.repas.spoon } }];\n"
+      },
+      "id": "3af69990-2e37-485b-93e7-d29a48cda24a",
+      "name": "Pick Meal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "77f258a4-6feb-41af-8cdf-105e2cbb4ba2",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ce72f824-b6fb-40cb-98c7-8bea51be890b",
+      "name": "Recipe Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1984,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.spoonacular.com/recipes/{{ $json.spoon }}/analyzedInstructions?stepBreakdown=true&apiKey=YOUR_SPOONACULAR_API_KEY",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "c429a97d-4059-406d-a580-4e8969638e57",
+      "name": "Fetch Steps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2208,
+        1200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Spoonacular returns sections (main, sauce...), each with numbered steps. Flatten them.\nconst etapes = [];\n$input.all().forEach(function (it) {\n  const s = it.json || {};\n  const titre = s.name ? String(s.name).trim() : '';\n  (s.steps || []).forEach(function (e, k) {\n    let minutes = 0;\n    if (e.length && /min/i.test(e.length.unit || '')) minutes = Number(e.length.number) || 0;\n    if (e.length && /hour/i.test(e.length.unit || '')) minutes = (Number(e.length.number) || 0) * 60;\n    etapes.push({ texte: (titre && k === 0 ? '[' + titre + '] ' : '') + String(e.step || '').trim(), minutes: minutes });\n  });\n});\nconst ctx = $('Pick Meal').first().json;\nreturn [{ json: Object.assign({}, ctx, { etapes: etapes }) }];\n"
+      },
+      "id": "b5475fbb-2046-4d65-8877-776214db1053",
+      "name": "Flatten Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "df789040-00c4-4b17-8581-ba56b08fee6d",
+              "leftValue": "={{ $('Parse Intent').first().json.intention }}",
+              "rightValue": "cuisiner",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "72afa069-cd60-4f1e-90ca-e10b68e43235",
+      "name": "Cook Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2720,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '\\u2022 ' + i.nom + (q ? ' \\u2014 ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' \\u00b7 ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('\\ud83e\\uddfa Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('\\ud83d\\udd17 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '\\ud83c\\udf73 ' + plat + ' \\u2014 step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n\\u23f1 About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '\\u27a1\\ufe0f next \\u00b7 back \\u00b7 repeat \\u00b7 /stop' : '\\u27a1\\ufe0f next to finish \\u00b7 back \\u00b7 repeat');\n  t += '\\n\\ud83d\\udcac Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n\\u2026 (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, r = c.repas;\nlet t = c.note + '\\ud83d\\udcd6 ' + r.plat + (infos(r) ? '\\n' + infos(r) : '') + '\\n\\n\\ud83e\\uddfa Ingredients' + (c.personnes ? ' (for ' + c.personnes + ')' : '') + ':\\n' + listeIngredients(r);\nif (c.etapes.length) {\n  t += '\\n\\n\\ud83d\\udc69\\u200d\\ud83c\\udf73 Steps:\\n' + c.etapes.map(function (e, i) { return (i + 1) + '. ' + e.texte; }).join('\\n');\n} else {\n  t += '\\n\\nNo step-by-step available for this one.';\n}\nif (r.lien) t += '\\n\\n\\ud83d\\udd17 ' + r.lien;\nt += '\\n\\n\\u27a1\\ufe0f /cook to do it together, one step at a time';\nreturn [{ json: { texte: couper(t) } }];\n"
+      },
+      "id": "e579b133-0e03-4868-8c80-e4a57072b2cd",
+      "name": "Full Recipe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        1344
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '\\u2022 ' + i.nom + (q ? ' \\u2014 ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' \\u00b7 ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('\\ud83e\\uddfa Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('\\ud83d\\udd17 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '\\ud83c\\udf73 ' + plat + ' \\u2014 step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n\\u23f1 About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '\\u27a1\\ufe0f next \\u00b7 back \\u00b7 repeat \\u00b7 /stop' : '\\u27a1\\ufe0f next to finish \\u00b7 back \\u00b7 repeat');\n  t += '\\n\\ud83d\\udcac Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n\\u2026 (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, r = c.repas;\nif (!c.etapes.length) {\n  return [{ json: { maj: false, texte: c.note + 'Spoonacular has no step-by-step for ' + r.plat + '. Full recipe: ' + (r.lien || 'not available') + '\\nAsk me anything while you cook.' } }];\n}\nconst t = c.note + '\\ud83d\\udc68\\u200d\\ud83c\\udf73 Let\\'s cook ' + r.plat + (c.personnes ? ' for ' + c.personnes : '') + '!' +\n  (r.temps ? ' About ' + r.temps + ' min in total.' : '') +\n  '\\n\\n\\ud83e\\uddfa Mise en place \\u2014 get these out first:\\n' + listeIngredients(r) +\n  '\\n\\n' + messageEtape(r.plat, c.etapes, 0);\nreturn [{ json: { maj: true, texte: couper(t), recordId: c.recordId, plat: r.plat, creneau: r.creneau,\n  etapesJson: JSON.stringify(c.etapes), etape: 0 } }];\n"
+      },
+      "id": "8e212e17-2f75-49af-88a0-7a21475ca9f2",
+      "name": "Start Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json, s = c.session || {};\nlet etapes = [];\ntry { etapes = JSON.parse(s.etapes || '[]'); } catch (e) { etapes = []; }\nif (!etapes.length) {\n  return [{ json: { maj: false, texte: m.intention === 'stop' ? 'No cooking session running.' : 'No cooking session running. Start one with /cook (add lunch, dinner or a day).' } }];\n}\nconst vider = { maj: true, recordId: c.recordId, plat: '', creneau: '', etapesJson: '', etape: 0 };\nlet i = Number(s.etape) || 0;\nif (m.intention === 'stop') return [{ json: Object.assign({}, vider, { texte: 'Session closed. Enjoy your ' + s.plat + '! 🍽' }) }];\nif (m.intention === 'suivant') i += 1;\nif (m.intention === 'precedent') i = Math.max(0, i - 1);\nif (i >= etapes.length) {\n  return [{ json: Object.assign({}, vider, { texte: '🎉 That was the last step. ' + s.plat + ' is ready, bon appétit!\\n\\n➡️ /today for what\\'s next' }) }];\n}\nreturn [{ json: { maj: i !== (Number(s.etape) || 0), recordId: c.recordId, plat: s.plat, creneau: s.creneau,\n  etapesJson: s.etapes, etape: i, texte: messageEtape(s.plat, etapes, i) } }];\n"
+      },
+      "id": "d3e4881b-6aa1-4c98-a799-d8c6f1d6241c",
+      "name": "Navigate Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        1696
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "49778eea-7c88-4bcf-8764-672e74516a72",
+              "leftValue": "={{ $json.maj }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "4abf78d1-5ba8-409f-be9f-47ace56e3376",
+      "name": "Session Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3232,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblLz1WHWOjv9YbpW",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Session plat": "={{ $json.plat }}",
+            "Session creneau": "={{ $json.creneau }}",
+            "Session etapes": "={{ $json.etapesJson }}",
+            "Session etape": "={{ $json.etape }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Session plat",
+              "displayName": "Session plat",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Session creneau",
+              "displayName": "Session creneau",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Session etapes",
+              "displayName": "Session etapes",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Session etape",
+              "displayName": "Session etape",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "e9b0980a-09d9-4a64-97ab-34c97a9c7a5c",
+      "name": "Save Session",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        3456,
+        1680
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json, s = c.session || {};\n// During a cooking session, \"ingredients\" means the dish on the stove.\nconst creneau = (s.plat && s.creneau) ? s.creneau : m.creneau;\nconst r = repasPour(c.repas, creneau);\nconst note = r.exact ? '' : 'Nothing planned for ' + libelle(creneau) + ', so here\\'s ' + libelle(r.repas.creneau) + '.\\n\\n';\nreturn [{ json: { texte: note + '🧺 ' + r.repas.plat + (c.personnes ? ' (for ' + c.personnes + ')' : '') + ':\\n' + listeIngredients(r.repas) } }];\n"
+      },
+      "id": "bbd68368-8f14-4dba-a55d-40b7fad7e6b5",
+      "name": "List Ingredients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        1888
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appPsFChiY0lgPCJI",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblrEiPibEMZsIGq2",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ \"{Demande} = '\" + $json.reference + \"'\" }}",
+        "options": {}
+      },
+      "id": "ead087ad-49ba-4ccd-bf59-95f8622d2bfb",
+      "name": "Fetch Groceries",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        2720,
+        2080
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "Yrs9HbKYI2S9bAPU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lignes = $input.all().map(function (i) { return i.json; }).filter(function (l) { return l.Ingredient; });\nif (!lignes.length) {\n  return [{ json: { texte: 'No shopping list for this week yet. On the site, validate your week and I\\'ll have it here.' } }];\n}\nconst parRayon = {}; let total = 0, enStock = 0;\nlignes.forEach(function (l) {\n  if (l['Deja en stock'] && !l['A acheter']) { enStock++; return; }\n  const r = l.Rayon || 'Other';\n  (parRayon[r] = parRayon[r] || []).push('\\u2610 ' + l.Ingredient + (l.Quantite ? ' \\u2014 ' + l.Quantite : ''));\n  total += Number(l['Cout estime']) || 0;\n});\nlet t = '\\ud83d\\uded2 Your shopping list\\n';\nObject.keys(parRayon).sort().forEach(function (r) { t += '\\n' + r + '\\n' + parRayon[r].join('\\n') + '\\n'; });\nif (total) t += '\\nEstimated total: \\u20ac' + total.toFixed(2);\nif (enStock) t += '\\n(' + enStock + ' item' + (enStock > 1 ? 's' : '') + ' already in your cupboard, left out.)';\nreturn [{ json: { texte: t.length > 3900 ? t.slice(0, 3850) + '\\n\\u2026' : t } }];\n"
+      },
+      "id": "3a7ccfac-ca05-4486-9a16-c09cfcc4fd16",
+      "name": "Format Groceries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json;\nconst r = c.repas.find(function (x) { return x.creneau === m.creneau; });\nif (!r) return [{ json: { ok: false, texte: 'There\\'s no meal on ' + libelle(m.creneau) + ' to swap. Try /swap with a day, e.g. /swap friday dinner.' } }];\nreturn [{ json: { ok: true, reference: c.reference, creneau: m.creneau, ancienPlat: r.plat, personnes: c.personnes,\n  corps: { reference: c.reference, creneaux: [m.creneau] } } }];\n"
+      },
+      "id": "e162164d-23f7-4958-8d2b-35516a00c400",
+      "name": "Prepare Swap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3f927341-2c3a-44b2-aa02-f4e744441610",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "24ba70e5-460a-4345-810a-c4b700315b48",
+      "name": "Slot Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_HOST/webhook/meal-prep-remplacer",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.corps) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "224d708f-2af3-4476-83b2-bb942a02e6ff",
+      "name": "Trigger Swap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1536,
+        2432
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst p = $('Prepare Swap').first().json, r = $input.first().json || {};\nif (r.ok !== true) return [{ json: { lance: false, texte: 'The swap couldn\\'t start' + (r.message ? ': ' + r.message : '.') + ' Try again from the site.' } }];\nreturn [{ json: { lance: true, texte: '🔄 Looking for something to replace ' + p.ancienPlat + ' on ' + libelle(p.creneau) + '. Give me ~30 seconds.' } }];\n"
+      },
+      "id": "93c18a37-85f8-4061-95cb-577ca7fecadc",
+      "name": "Swap Ack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "525e1344-0aac-4b3a-93ac-16a2206eb0e6",
+              "leftValue": "={{ $json.lance }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "6d68b07d-9597-4020-8dd1-1d66f48c3f39",
+      "name": "Swap Started?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1984,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "fb3a7313-4ea5-4626-9623-2fcd21c53dd8",
+      "name": "Poll Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2208,
+        2528
+      ],
+      "webhookId": "a831fb7d-2dcc-4b2e-b0de-1963cc509723"
+    },
+    {
+      "parameters": {
+        "url": "=https://YOUR_N8N_HOST/webhook/meal-prep-statut?ref={{ $('Prepare Swap').first().json.reference }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a309fd3d-b182-458b-afd9-a12e91261cff",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2432,
+        2512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\n// Done when the slot holds a different dish than before. Gives up after ~9 polls.\nconst p = $('Prepare Swap').first().json, r = $input.first().json || {};\nconst repas = Array.isArray(r.repas) ? r.repas : [];\nconst nouveau = repas.find(function (x) { return x.creneau === p.creneau; });\nif (nouveau && nouveau.plat && nouveau.plat !== p.ancienPlat) {\n  return [{ json: { etat: 'pret', texte: '✅ Swapped. ' + libelle(p.creneau) + ' is now:\\n\\n' + fiche(nouveau, p.personnes) + '\\n\\n➡️ /cook ' + (NOM_JOUR[p.creneau.split('_')[0]] || '').toLowerCase() + ' ' + (NOM_MOMENT[p.creneau.split('_')[1]] || '') + ' to cook it with me' } }];\n}\nif (r.statut === 'echec' || r.statut === 'introuvable') return [{ json: { etat: 'abandon', texte: 'The swap failed' + (r.message ? ': ' + r.message : '.') + ' Your plan is unchanged.' } }];\nif ($runIndex >= 8) return [{ json: { etat: 'abandon', texte: 'This is taking longer than usual. Check the site in a minute, the swap may still land.' } }];\nreturn [{ json: { etat: 'attendre' } }];\n"
+      },
+      "id": "e20f67b4-e55c-4b6c-b57d-f1a5b91e0c81",
+      "name": "Compare Dish",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "054daf76-f2ef-4ef2-8738-b5a248eb86d1",
+                    "leftValue": "={{ $json.etat }}",
+                    "rightValue": "pret",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "pret"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "899befb7-ca4b-41bc-bb7e-da3e91091984",
+                    "leftValue": "={{ $json.etat }}",
+                    "rightValue": "abandon",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "abandon"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "attendre"
+        }
+      },
+      "id": "79d7e098-4ed7-47fc-b024-afc8deacf603",
+      "name": "Swap Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3008,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst NOM_JOUR = { Lun: 'Monday', Mar: 'Tuesday', Mer: 'Wednesday', Jeu: 'Thursday', Ven: 'Friday', Sam: 'Saturday', Dim: 'Sunday' };\nconst NOM_MOMENT = { midi: 'lunch', soir: 'dinner' };\nconst ORDRE_JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];\nconst ORDRE_MOMENTS = ['midi', 'soir'];\nfunction libelle(c) { const p = String(c || '').split('_'); return (NOM_JOUR[p[0]] || p[0]) + ' ' + (NOM_MOMENT[p[1]] || p[1]); }\nfunction rang(c) { const p = String(c || '').split('_'); return ORDRE_JOURS.indexOf(p[0]) * 2 + ORDRE_MOMENTS.indexOf(p[1]); }\nfunction quantite(i) { return [i.quantite || '', i.unite || ''].join(' ').trim(); }\nfunction listeIngredients(r) {\n  return (r.ingredients || []).map(function (i) { const q = quantite(i); return '• ' + i.nom + (q ? ' — ' + q : ''); }).join('\\n');\n}\nfunction infos(r) {\n  const x = [];\n  if (r.temps) x.push(r.temps + ' min');\n  if (r.calories) x.push(r.calories + ' kcal');\n  if (r.proteines) x.push(r.proteines + ' g protein');\n  return x.join(' · ');\n}\nfunction fiche(r, personnes) {\n  const l = [r.plat];\n  if (infos(r)) l.push(infos(r));\n  if (r.ingredients && r.ingredients.length) { l.push(''); l.push('🧺 Ingredients' + (personnes ? ' (for ' + personnes + ')' : '') + ':'); l.push(listeIngredients(r)); }\n  if (r.lien) { l.push(''); l.push('🔗 ' + r.lien); }\n  return l.join('\\n');\n}\n// The meal for the asked slot, or the next one coming up when that slot is empty.\nfunction repasPour(repas, creneau) {\n  const ici = repas.find(function (r) { return r.creneau === creneau; });\n  if (ici) return { repas: ici, exact: true };\n  const jour = String(creneau).split('_')[0];\n  const memeJour = repas.find(function (r) { return String(r.creneau).split('_')[0] === jour; });\n  if (memeJour) return { repas: memeJour, exact: false };\n  const suivant = repas.find(function (r) { return rang(r.creneau) > rang(creneau); }) || repas[0];\n  return { repas: suivant, exact: false };\n}\nfunction messageEtape(plat, etapes, i) {\n  const e = etapes[i];\n  let t = '🍳 ' + plat + ' — step ' + (i + 1) + '/' + etapes.length + '\\n\\n' + e.texte;\n  if (e.minutes) t += '\\n\\n⏱ About ' + e.minutes + ' min. Send /timer ' + e.minutes + ' and I\\'ll ping you.';\n  t += '\\n\\n' + (i + 1 < etapes.length ? '➡️ next · back · repeat · /stop' : '➡️ next to finish · back · repeat');\n  t += '\\n💬 Stuck? Just ask me.';\n  return t;\n}\nfunction couper(t) { return t.length > 3900 ? t.slice(0, 3850) + '\\n\\n… (cut, Telegram limit)' : t; }\n\nconst c = $input.first().json, m = $('Parse Intent').first().json, s = c.session || {};\nconst semaine = c.repas.map(function (r) {\n  return '- ' + libelle(r.creneau) + ': ' + r.plat + (r.temps ? ' (' + r.temps + ' min)' : '') + ' — ' +\n    (r.ingredients || []).map(function (i) { const q = quantite(i); return i.nom + (q ? ' ' + q : ''); }).join(', ');\n}).join('\\n');\nlet cuisine = 'They are not in a guided cooking session right now.';\ntry {\n  const etapes = JSON.parse(s.etapes || '[]');\n  if (etapes.length) {\n    const i = Number(s.etape) || 0;\n    cuisine = 'They are cooking ' + s.plat + ' right now, on step ' + (i + 1) + ' of ' + etapes.length + ': \"' + etapes[i].texte + '\".\\nAll steps:\\n' +\n      etapes.map(function (e, k) { return (k + 1) + '. ' + e.texte; }).join('\\n');\n  }\n} catch (e) {}\nconst systeme = [\n  'You are Meal Prep Chef, a warm, practical cooking assistant inside a Telegram bot. You help ' + (c.prenom || 'the user') + ' cook the meals they planned for the week.',\n  'You think like an experienced home cook: precise quantities, temperatures, timings, doneness cues (colour, texture, internal temperature), substitutions from what they likely have, and how to rescue mistakes.',\n  '',\n  'Their week, for ' + (c.personnes || '?') + ' people:',\n  semaine,\n  '',\n  cuisine,\n  '',\n  'It is ' + libelle(m.creneau) + ' (Paris time).',\n  '',\n  'Rules:',\n  '- Answer in the language the user writes in.',\n  '- Keep it short and scannable: under 150 words, plain text only (no markdown, no asterisks, no tables). Short lines and simple dashes are fine.',\n  '- When they are cooking, answer about the current step first.',\n  '- Food safety matters: give safe internal temperatures for meat and fish when relevant.',\n  '- You can mention the bot commands when useful: /today, /week, /recipe, /cook, next, back, /timer N, /list, /swap.',\n  '- If the request has nothing to do with food or cooking, say in one sentence what you can help with.'\n].join('\\n');\nreturn [{ json: { systeme: systeme, message: m.texte } }];\n"
+      },
+      "id": "52dc299b-9c57-4092-8a5a-e435ab664223",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        2896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "={{ $json.systeme }}"
+        }
+      },
+      "id": "e550e590-73ff-46a2-8fb9-ddaa516fac9c",
+      "name": "Chef Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2656,
+        2896
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "64b2c300-dd58-4724-a77c-c652ff728c7a",
+      "name": "Groq Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2672,
+        3136
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "nQ5hQiyH67THxEA3",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'tg-' + $('Parse Intent').first().json.chatId }}",
+        "contextWindowLength": 10
+      },
+      "id": "7a4e90cf-91fd-4747-ac77-217087e07019",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2800,
+        3136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json || {};\nconst t = String(r.output || r.text || '').replace(/\\*\\*/g, '').trim();\nreturn [{ json: { texte: t || 'Sorry, I couldn\\'t answer that one. Try rephrasing, or send /help.' } }];\n"
+      },
+      "id": "0bdb19bd-5cdc-4022-a93f-860d61931393",
+      "name": "Clean Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        2896
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Intent').first().json.chatId }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "f2a13ea7-2435-49f4-aa4d-3118039dc250",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3232,
+        1488
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "webhookId": "c1503ebe-67b5-4357-a51f-6a941d2f1297",
+      "credentials": {
+        "telegramApi": {
+          "id": "ozgpTbnvniKveIIF",
+          "name": "Telegram account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Message": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Build Menu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Timer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Menu": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Plan": {
+      "main": [
+        [
+          {
+            "node": "Check Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Link": {
+      "main": [
+        [
+          {
+            "node": "Plan Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Valid?": {
+      "main": [
+        [
+          {
+            "node": "Save Link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Link": {
+      "main": [
+        [
+          {
+            "node": "Welcome Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome Message": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Timer": {
+      "main": [
+        [
+          {
+            "node": "Duration Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duration Valid?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Timer Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timer Wait": {
+      "main": [
+        [
+          {
+            "node": "Timer Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timer Done": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Week": {
+      "main": [
+        [
+          {
+            "node": "Account Linked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Account Linked?": {
+      "main": [
+        [
+          {
+            "node": "Plan Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Linked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not Linked": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Exists?": {
+      "main": [
+        [
+          {
+            "node": "Attach Intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Plan": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Intent": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "Current Meal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Week Overview",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pick Meal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Navigate Steps",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List Ingredients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Groceries",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Swap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current Meal": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Week Overview": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Meal": {
+      "main": [
+        [
+          {
+            "node": "Recipe Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recipe Available?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Steps",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Steps": {
+      "main": [
+        [
+          {
+            "node": "Flatten Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Steps": {
+      "main": [
+        [
+          {
+            "node": "Cook Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cook Mode?": {
+      "main": [
+        [
+          {
+            "node": "Start Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Full Recipe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Full Recipe": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Session": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Session Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Navigate Steps": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Session Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Changed?": {
+      "main": [
+        [
+          {
+            "node": "Save Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Ingredients": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Groceries": {
+      "main": [
+        [
+          {
+            "node": "Format Groceries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Groceries": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Swap": {
+      "main": [
+        [
+          {
+            "node": "Slot Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot Found?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Swap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Swap": {
+      "main": [
+        [
+          {
+            "node": "Swap Ack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swap Ack": {
+      "main": [
+        [
+          {
+            "node": "Swap Started?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swap Started?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Poll Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Wait": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status": {
+      "main": [
+        [
+          {
+            "node": "Compare Dish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Dish": {
+      "main": [
+        [
+          {
+            "node": "Swap Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Swap Outcome": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Poll Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Chef Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chef Agent": {
+      "main": [
+        [
+          {
+            "node": "Clean Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Chef Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Chef Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "66176248-b04e-4998-8573-0b7d966dc637",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "ee0d4aab641842fbb7025e71d4d9a1d0ac0b671da70544f4f418eb3e8c0e3df7"
+  },
+  "nodeGroups": [],
+  "id": "fWmEplq3bjnuAXae",
+  "tags": []
+}
