@@ -52,6 +52,29 @@ Everything runs on **7 n8n workflows** on my own n8n server. **Airtable** is the
 | 6 | `06-telegram-chef.json` | You send the bot a message | Works out what you want and which meal you mean (Paris time), then handles it: `/today`, `/week`, `/recipe`, `/cook` (step by step with `next`, `back` and `repeat`), `/timer 10`, `/list`, `/swap`, and linking your account with `/start MP-…`. Anything else goes to an AI agent that remembers the last 10 messages. |
 | 7 | `07-load-week.json` | Workflow 6 calls it | Sub-workflow: goes from your Telegram chat to your account, your latest plan, its meals and where you are in a recipe. |
 
+## Screenshots of the workflows
+
+**1. Generate the plan**
+![Workflow 1](docs/screenshots/01-generate-plan.png)
+
+**2. Plan status**
+![Workflow 2](docs/screenshots/02-plan-status.png)
+
+**3. Build the shopping list**
+![Workflow 3](docs/screenshots/03-build-shopping-list.png)
+
+**4. Read the shopping list**
+![Workflow 4](docs/screenshots/04-read-shopping-list.png)
+
+**5. Swap meals**
+![Workflow 5](docs/screenshots/05-swap-meals.png)
+
+**6. Meal Prep Chef (Telegram bot)**
+![Workflow 6](docs/screenshots/06-telegram-chef.png)
+
+**7. Load the week (sub-workflow)**
+![Workflow 7](docs/screenshots/07-load-week.png)
+
 ## Course requirements
 
 | Requirement | Where to find it |
@@ -78,7 +101,7 @@ Everything runs on **7 n8n workflows** on my own n8n server. **Airtable** is the
 ```
 workflows/   the 7 n8n workflows (API key removed)
 frontend/    the website, as it's deployed on Vercel
-docs/        the architecture diagram, my project proposal and screenshots
+docs/        the architecture diagram, my project proposal and screenshots of each workflow
 .env.example the keys you need to run it
 ```
 
